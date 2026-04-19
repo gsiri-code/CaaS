@@ -1,21 +1,20 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type {
+  WishlistMatchMock as Match,
+  WishlistSearchResponse,
+} from "@/lib/mock-fixtures";
 
-type Match = {
-  id: string;
-  category: string;
-  subcategory: string | null;
-  brandGuess: string | null;
-  description: string;
-  heroImageUrl: string;
-  ownerName: string;
-  userId: string;
-  matchPercent: number;
-  estimatedDailyRental: number | null;
-};
+const SAMPLE_QUERIES = [
+  "black satin midi dress for an evening event",
+  "camel wool coat for a cold dinner",
+  "white sneakers for a weekend trip",
+];
 
 export default function WishlistClient({ as }: { as: "alice" | "bob" }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
@@ -35,7 +34,7 @@ export default function WishlistClient({ as }: { as: "alice" | "bob" }) {
           maxPricePerDay: maxPrice ? parseInt(maxPrice) : undefined,
         }),
       });
-      const data = await res.json();
+      const data: WishlistSearchResponse = await res.json();
       setMatches(data.matches || []);
       setSearched(true);
     } catch {
@@ -56,7 +55,7 @@ export default function WishlistClient({ as }: { as: "alice" | "bob" }) {
       }),
     });
     if (res.ok) {
-      window.location.href = "/negotiations";
+      router.push(`/negotiations?as=${as}`);
     }
   }
 
@@ -104,6 +103,18 @@ export default function WishlistClient({ as }: { as: "alice" | "bob" }) {
         >
           {searching ? "Searching..." : "Search Friends' Closets"}
         </button>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          {SAMPLE_QUERIES.map((sample) => (
+            <button
+              key={sample}
+              onClick={() => setQuery(sample)}
+              className="rounded-full bg-[#F5F5F5] px-3 py-2 text-[12px] text-[#555] text-left"
+            >
+              {sample}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Results */}

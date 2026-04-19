@@ -33,6 +33,47 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
   const [cards, setCards] = useState<GarmentCard[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  function loadDemoPreview() {
+    setStatus({
+      batchId: "demo-batch",
+      photosDone: 6,
+      photosTotal: 6,
+      garmentsTotal: 4,
+      done: true,
+      error: null,
+    });
+    setCards([
+      {
+        id: as === "alice" ? "g-alice-1" : "g-bob-1",
+        category: "Dress",
+        heroUrl:
+          "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80",
+        brandGuess: "Vince",
+      },
+      {
+        id: as === "alice" ? "g-alice-2" : "g-bob-2",
+        category: "Outerwear",
+        heroUrl:
+          "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80",
+        brandGuess: "Aritzia",
+      },
+      {
+        id: as === "alice" ? "g-alice-1" : "g-bob-1",
+        category: "Shoes",
+        heroUrl:
+          "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
+        brandGuess: "Common Projects",
+      },
+      {
+        id: as === "alice" ? "g-alice-2" : "g-bob-2",
+        category: "Top",
+        heroUrl:
+          "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
+        brandGuess: "Demo Atelier",
+      },
+    ]);
+  }
+
   const onFiles = useCallback(
     async (files: FileList) => {
       if (files.length === 0) return;
@@ -117,6 +158,12 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
         >
           Take New Photos
         </button>
+        <button
+          onClick={loadDemoPreview}
+          className="h-11 rounded text-[14px] text-[#757575] bg-[#F7F7F7] flex items-center justify-center"
+        >
+          Load Demo Import
+        </button>
         <input
           ref={inputRef}
           type="file"
@@ -160,7 +207,7 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
             {cards.map((c) => (
               <Link
                 key={c.id}
-                href={`/closet/${c.id}`}
+                href={`/closet/${c.id}?as=${as}`}
                 className="no-underline text-black"
               >
                 <div className="rounded overflow-hidden">

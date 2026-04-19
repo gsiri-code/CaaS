@@ -2,35 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type {
+  GarmentDetailMock as Garment,
+  GarmentDetailResponse,
+} from "@/lib/mock-fixtures";
 
-type Photo = {
-  id: string;
-  photoId: string;
-  fileUrl: string;
-  cropBbox: { x: number; y: number; w: number; h: number } | null;
-};
-
-type Garment = {
-  id: string;
-  category: string;
-  subcategory: string | null;
-  colorPrimary: string | null;
-  colorSecondary: string | null;
-  pattern: string | null;
-  silhouette: string | null;
-  brandGuess: string | null;
-  description: string;
-  heroImageUrl: string;
-  wearCount: number;
-  lastWornAt: string | null;
-  estimatedValueUsd: number | null;
-  vault: boolean;
-  photos: Photo[];
-};
-
-function timeAgo(date: string | null) {
+function timeAgo(date: string | Date | null) {
   if (!date) return "—";
-  const diff = Date.now() - new Date(date).getTime();
+  const diff = Date.now() - (date instanceof Date ? date.getTime() : new Date(date).getTime());
   const days = Math.floor(diff / 86400000);
   if (days < 7) return `${days}d`;
   if (days < 30) return `${Math.floor(days / 7)}w`;
@@ -55,7 +34,7 @@ export default function GarmentDetail({
         if (!r.ok) throw new Error("not found");
         return r.json();
       })
-      .then((data) => {
+      .then((data: GarmentDetailResponse) => {
         setGarment(data);
         setLoading(false);
       })

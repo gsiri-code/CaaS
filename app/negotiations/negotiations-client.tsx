@@ -1,44 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-type Negotiation = {
-  id: string;
-  requesterId: string;
-  ownerId: string;
-  garmentId: string;
-  status: string;
-  agreedPriceUsd: number | null;
-  agreedHandoff: { type: string; datetime?: string; location?: string } | null;
-  turnCount: number;
-  garmentCategory: string;
-  garmentHeroUrl: string;
-  garmentBrand: string | null;
-  garmentDescription: string;
-};
-
-type Message = {
-  id: string;
-  speaker: string;
-  content: string;
-  toolCall: { name: string; result?: string } | null;
-  createdAt: string;
-};
-
-type NegotiationDetail = Negotiation & {
-  messages: Message[];
-  garment: {
-    id: string;
-    category: string;
-    brandGuess: string | null;
-    description: string;
-    heroImageUrl: string;
-    estimatedValueUsd: number | null;
-  };
-};
+import type {
+  NegotiationDetailMock as NegotiationDetail,
+  NegotiationDetailResponse,
+  NegotiationListMock as Negotiation,
+  NegotiationListResponse,
+} from "@/lib/mock-fixtures";
 
 export default function NegotiationsClient({
-  userId,
   userName,
   as,
 }: {
@@ -53,7 +23,7 @@ export default function NegotiationsClient({
   useEffect(() => {
     fetch(`/api/negotiations?as=${as}`)
       .then((r) => r.json())
-      .then((data) => {
+      .then((data: NegotiationListResponse) => {
         setNegotiations(data);
         setLoading(false);
       })
@@ -61,15 +31,16 @@ export default function NegotiationsClient({
   }, [as]);
 
   async function openNegotiation(id: string) {
-    const res = await fetch(`/api/negotiations/${id}`);
+    const res = await fetch(`/api/negotiations/${id}?as=${as}`);
     if (res.ok) {
-      setSelected(await res.json());
+      const data: NegotiationDetailResponse = await res.json();
+      setSelected(data);
     }
   }
 
   async function handleAction(action: "accepted" | "rejected") {
     if (!selected) return;
-    const res = await fetch(`/api/negotiations/${selected.id}`, {
+    const res = await fetch(`/api/negotiations/${selected.id}?as=${as}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: action }),
