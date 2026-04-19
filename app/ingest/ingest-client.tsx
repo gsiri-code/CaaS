@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 
 type GarmentCard = {
@@ -85,25 +86,37 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
     [as],
   );
 
+  const progressPct =
+    status.photosTotal > 0
+      ? Math.round((status.photosDone / status.photosTotal) * 100)
+      : 0;
+
   return (
-    <div className="mt-6">
-      <div
-        className="border-2 border-dashed border-black/20 dark:border-white/20 rounded-lg p-8 text-center cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (e.dataTransfer.files) onFiles(e.dataTransfer.files);
-        }}
-      >
-        <p className="text-sm">
-          Drop a <code className="font-mono">.zip</code> or multi-select images
+    <div className="min-h-screen flex flex-col">
+      {/* Hero */}
+      <div className="px-6 pt-16 pb-2">
+        <h1 className="text-[28px] font-light tracking-tight leading-[34px]">
+          Import Your{"\n"}Closet
+        </h1>
+        <p className="mt-3 text-[15px] text-[#757575]">
+          Open your camera roll to get started.
         </p>
-        <p className="text-xs text-black/50 dark:text-white/50 mt-1">
-          jpg / jpeg / png / webp / heic
-        </p>
+      </div>
+
+      {/* Buttons */}
+      <div className="px-6 py-6 flex flex-col gap-3">
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="h-12 rounded bg-black text-white text-[15px] font-medium flex items-center justify-center"
+        >
+          Open Camera Roll
+        </button>
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="h-12 rounded border border-black/8 text-[15px] font-medium flex items-center justify-center"
+        >
+          Take New Photos
+        </button>
         <input
           ref={inputRef}
           type="file"
@@ -116,38 +129,63 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
         />
       </div>
 
+      {/* Progress */}
       {status.batchId && (
-        <div className="mt-4 text-sm flex items-center gap-4">
-          <span>
-            Processed {status.photosDone}/{status.photosTotal || "?"} photos
-          </span>
-          <span>
-            {status.garmentsTotal} unique garment{status.garmentsTotal === 1 ? "" : "s"}
-          </span>
-          {status.done && !status.error && <span className="text-emerald-600">done</span>}
-          {status.error && <span className="text-red-600">error: {status.error}</span>}
+        <div className="px-6 py-3">
+          <div className="h-0.5 bg-black/8 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-black rounded-full transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-[13px] text-[#757575]">
+            <span>
+              Processing {status.photosDone} / {status.photosTotal || "?"} photos
+            </span>
+            <span>{status.garmentsTotal} items</span>
+          </div>
+          {status.done && !status.error && (
+            <p className="mt-1 text-[13px] text-emerald-600 font-medium">Complete</p>
+          )}
+          {status.error && (
+            <p className="mt-1 text-[13px] text-red-600">Error: {status.error}</p>
+          )}
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-        {cards.map((c) => (
-          <div
-            key={c.id}
-            className="rounded border border-black/10 dark:border-white/10 overflow-hidden"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={c.heroUrl} alt={c.category} className="w-full aspect-square object-cover" />
-            <div className="px-2 py-1 text-xs flex items-center justify-between">
-              <span className="capitalize">{c.category}</span>
-              {c.brandGuess && (
-                <span className="text-black/50 dark:text-white/50 truncate ml-2">
-                  {c.brandGuess}
-                </span>
-              )}
-            </div>
+      {/* Garment Grid */}
+      {cards.length > 0 && (
+        <div className="px-6 pt-2 pb-4">
+          <div className="grid grid-cols-2 gap-4">
+            {cards.map((c) => (
+              <Link
+                key={c.id}
+                href={`/closet/${c.id}`}
+                className="no-underline text-black"
+              >
+                <div className="rounded overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={c.heroUrl}
+                    alt={c.category}
+                    className="w-full aspect-[163/200] object-cover bg-[#F0F0F0]"
+                  />
+                  <div className="pt-2">
+                    <p className="text-[14px] font-medium capitalize leading-tight">
+                      {c.category}
+                    </p>
+                    {c.brandGuess && (
+                      <p className="text-[12px] text-[#757575] mt-0.5">
+                        {c.brandGuess}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
