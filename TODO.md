@@ -2,7 +2,7 @@
 
 ## Context
 
-**App overview.** "Plaid for closets": passive wardrobe ingestion from a user's camera roll, exposed to agents that negotiate peer-to-peer rentals inside a friend graph. Two hero demo moments: (1) retroactive ingestion of ~200 photos into a deduplicated closet in under 3 minutes, (2) two agents autonomously negotiating a rental, with Google Calendar context to route the handoff via an already-scheduled meeting ("bring the dress Thursday").
+**App overview.** "Plaid for closets": passive wardrobe ingestion from a user's camera roll, exposed to agents that negotiate peer-to-peer rentals inside a friend graph. Two hero demo moments: (1) retroactive ingestion of ~100 photos into a deduplicated closet in under 3 minutes, (2) two agents autonomously negotiating a rental, with Google Calendar context to route the handoff via an already-scheduled meeting ("bring the dress Thursday").
 
 **Hackathon:** Phia-adjacent, 18 hours, judging prioritizes novelty + technical feasibility + demo polish.
 
@@ -196,7 +196,7 @@
 - [ ] Build `/app/ingest/page.tsx` with drop zone + live-populating grid
   - Connect to SSE endpoint, append/update garment cards as events arrive
   - Each card: hero crop, category tag, brand guess
-  - Show running counts: "Processed 87/200 photos, 34 unique garments"
+  - Show running counts: "Processed 87/100 photos, 34 unique garments"
 
 **Gotchas:**
 - Gemini JSON mode can fail; wrap in try/catch with one retry
@@ -279,7 +279,7 @@
 
 **Goal:** Guaranteed-working 3-minute demo with zero live-API gambles.
 
-- [ ] Curate two real camera rolls of 150-200 photos each (your own + teammate's)
+- [ ] Curate two real camera rolls of 50-100 photos each (your own + teammate's)
 - [ ] Pre-run ingestion on both, verify closets look clean; manually fix any egregious mis-tags
 - [ ] Seed 2-3 Google Calendar events between the two demo accounts in next 7 days
 - [ ] Seed a wishlist query that is guaranteed to match a specific item in the friend's closet
@@ -306,7 +306,7 @@
 - [ ] Verify dedup: include same shirt in 3 photos, confirm only 1 garment row created with 3 `garment_photos`
 - [ ] Verify false-split bias: include two visually similar but distinct items, confirm they stay separate
 - [ ] Spot-check 10 garments for attribute accuracy; tune extraction prompt if category accuracy < 80%
-- [ ] Confirm total cost for 200-photo run is under $1 (log API spend)
+- [ ] Confirm total cost for 100-photo run is under $1 (log API spend)
 
 ### After Phase 3
 - [ ] Edit a garment's color, refresh, confirm persisted
