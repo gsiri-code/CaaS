@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBus } from "@/lib/ingest/events";
+import { getBus, type IngestEvent } from "@/lib/ingest/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (payload: unknown) => {
+      const send = (payload: IngestEvent) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
 
@@ -26,12 +26,11 @@ export async function GET(req: NextRequest) {
         return;
       }
 
-      const onEvent = (event: unknown) => {
+      const onEvent = (event: IngestEvent) => {
         send(event);
-        const type = (event as { type?: string }).type;
-        if (type === "batch_complete" || type === "batch_error") {
-          controller.close();
+        if (event.type === "batch_complete" || event.type === "batch_error") {
           cleanup();
+          controller.close();
         }
       };
 

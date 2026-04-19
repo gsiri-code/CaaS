@@ -5,12 +5,14 @@ import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import AdmZip from "adm-zip";
-import { db } from "@/db";
+import { db, isDatabaseConfigured } from "@/db";
 import { photos } from "@/db/schema";
 import { createBus } from "@/lib/ingest/events";
 import { ensureBatchDirs, photoPath, photoPublicUrl } from "@/lib/ingest/storage";
 import { processBatch, type WorkerPhoto } from "@/lib/ingest/worker";
 import { DEMO_USERS, isDemoUserKey } from "@/lib/demo-users";
+import { startMockIngestBatch } from "@/lib/app-data";
+import { shouldUseMockData } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -29,8 +31,17 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const asParam = form.get("as");
   const asKey = typeof asParam === "string" && isDemoUserKey(asParam) ? asParam : "alice";
-  const userId = DEMO_USERS[asKey].id;
 
+  if (shouldUseMockData() || !isDatabaseConfigured()) {
+    return NextResponse.json(await startMockIngestBatch(asKey));
+  }
+
+  const realBatch = await createRealIngestBatch(form, asKey);
+  return NextResponse.json(realBatch);
+}
+
+export async function createRealIngestBatch(form: FormData, asKey: keyof typeof DEMO_USERS) {
+  const userId = DEMO_USERS[asKey].id;
   const batchId = randomUUID();
   const { photosDir } = await ensureBatchDirs(batchId);
   const accepted: WorkerPhoto[] = [];
@@ -46,14 +57,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (accepted.length === 0) {
-    return NextResponse.json({ error: "no valid image files in upload" }, { status: 400 });
+    throw new Error("no valid image files in upload");
   }
 
   createBus(batchId);
-  // Fire-and-forget; SSE endpoint subscribes by batchId.
   void processBatch(batchId, userId, accepted);
 
-  return NextResponse.json({ batch_id: batchId, accepted: accepted.length });
+  return { batch_id: batchId, accepted: accepted.length };
 }
 
 async function saveSingle(

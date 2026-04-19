@@ -7,6 +7,10 @@ type Db = ReturnType<typeof drizzle<typeof schema>>;
 
 const globalForPg = globalThis as unknown as { _caasPg?: PgClient; _caasDb?: Db };
 
+export function isDatabaseConfigured() {
+  return Boolean(process.env.DATABASE_URL);
+}
+
 function getClient(): PgClient {
   if (globalForPg._caasPg) return globalForPg._caasPg;
   const connectionString = process.env.DATABASE_URL;

@@ -23,24 +23,24 @@ export type IngestEvent =
   | { type: "batch_complete"; batchId: string }
   | { type: "batch_error"; batchId: string; error: string };
 
-type Bus = {
+export type IngestBus = {
   emitter: EventEmitter;
   backlog: IngestEvent[];
   done: boolean;
 };
 
-const globalForBus = globalThis as unknown as { _caasIngestBuses?: Map<string, Bus> };
-const buses = globalForBus._caasIngestBuses ?? new Map<string, Bus>();
+const globalForBus = globalThis as unknown as { _caasIngestBuses?: Map<string, IngestBus> };
+const buses = globalForBus._caasIngestBuses ?? new Map<string, IngestBus>();
 globalForBus._caasIngestBuses = buses;
 
-export function createBus(batchId: string): Bus {
-  const bus: Bus = { emitter: new EventEmitter(), backlog: [], done: false };
+export function createBus(batchId: string): IngestBus {
+  const bus: IngestBus = { emitter: new EventEmitter(), backlog: [], done: false };
   bus.emitter.setMaxListeners(32);
   buses.set(batchId, bus);
   return bus;
 }
 
-export function getBus(batchId: string): Bus | undefined {
+export function getBus(batchId: string): IngestBus | undefined {
   return buses.get(batchId);
 }
 
