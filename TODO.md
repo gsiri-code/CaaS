@@ -1,4 +1,189 @@
-- Include 3-shot examples in the system prompt
+# TODO.md — Closet-as-a-Service (CaaS) Hackathon Build
+
+## Context
+
+**App overview.** "Plaid for closets": passive wardrobe ingestion from a user's camera roll, exposed to agents that negotiate peer-to-peer rentals inside a friend graph. Two hero demo moments: (1) retroactive ingestion of ~200 photos into a deduplicated closet in under 3 minutes, (2) two agents autonomously negotiating a rental, with Google Calendar context to route the handoff via an already-scheduled meeting ("bring the dress Thursday").
+
+**Hackathon:** Phia-adjacent, 18 hours, judging prioritizes novelty + technical feasibility + demo polish.
+
+**Tech stack.**
+- Frontend: Next.js (App Router), Tailwind, mobile-first
+- Backend: Next.js API routes (simpler than FastAPI for single-process hackathon) [implied]
+- DB: Postgres + pgvector extension
+- Vision extraction: Gemini 2.5 Flash (structured JSON output, batched 4-6 photos/call)
+- Image embeddings: FashionCLIP (local, 512-dim, free)
+- Text embeddings: Gemini `text-embedding-004` (fallback: OpenAI `text-embedding-3-small`)
+- Agents: Claude Sonnet 4.6 with tool use
+- Streaming: SSE for ingestion progress, streaming Claude responses for negotiation
+- Calendar: Google Calendar API via OAuth
+
+**Key architectural decisions.**
+- Two vector columns per garment (image + text) plus structured metadata columns; hybrid retrieval = SQL filter + vector kNN rerank
+- Agents never touch vectors directly; they call tools that return structured JSON
+- Auth is hardcoded (two pre-seeded users) for demo
+- Rental (not trade, not sale) as the P2P verb because Pickle validated the unit economics and it yields the best demo line
+- Dedup errs toward false splits over false merges (judges forgive duplicates, not merged distinct items)
+- Negotiation hard-capped at 8 turns
+- Pre-stage both camera rolls and record video backup before demo
+
+## Data Models
+
+### `users`
+- `id` (uuid, pk)
+- `name` (text)
+- `email` (text)
+- `avatar_url` (text, nullable)
+- `google_oauth_token` (text, nullable, encrypted) [implied]
+- `created_at` (timestamptz)
+
+### `friendships`
+- `id` (uuid, pk)
+- `user_a_id` (uuid, fk users)
+- `user_b_id` (uuid, fk users)
+- `created_at` (timestamptz)
+- Constraint: unique pair regardless of order [implied]
+
+### `photos` (raw uploaded images)
+- `id` (uuid, pk)
+- `user_id` (uuid, fk users)
+- `file_url` (text, local path or S3)
+- `taken_at` (timestamptz, from EXIF if available)
+- `processed` (bool, default false)
+- `created_at` (timestamptz)
+
+### `garments` (canonical closet items)
+- `id` (uuid, pk)
+- `user_id` (uuid, fk users)
+- `category` (text: top, bottom, dress, outerwear, shoe, accessory)
+- `subcategory` (text: e.g., "cardigan", "midi dress")
+- `color_primary` (text)
+- `color_secondary` (text, nullable)
+- `pattern` (text: solid, striped, floral, etc.)
+- `silhouette` (text)
+- `brand_guess` (text, nullable)
+- `brand_confidence` (float 0-1)
+- `description` (text, natural language, used for text embedding)
+- `hero_image_url` (text, best crop)
+- `image_embedding` (vector(512), FashionCLIP)
+- `text_embedding` (vector(768), Gemini text-embedding-004)
+- `wear_count` (int, default 0)
+- `last_worn_at` (timestamptz, nullable)
+- `estimated_value_usd` (int, nullable)
+- `vault` (bool, default false, flags items agent cannot transact) [implied from earlier discussion]
+- `created_at` (timestamptz)
+
+### `garment_photos` (join: which photos contributed to which canonical garment)
+- `id` (uuid, pk)
+- `garment_id` (uuid, fk garments)
+- `photo_id` (uuid, fk photos)
+- `crop_bbox` (jsonb: {x, y, w, h})
+- `extraction_confidence` (float 0-1)
+
+### `wishlist_items`
+- `id` (uuid, pk)
+- `user_id` (uuid, fk users)
+- `query_text` (text)
+- `query_embedding` (vector(768))
+- `reference_image_url` (text, nullable)
+- `reference_image_embedding` (vector(512), nullable)
+- `max_rental_price_usd` (int, nullable)
+- `created_at` (timestamptz)
+
+### `rental_negotiations`
+- `id` (uuid, pk)
+- `requester_id` (uuid, fk users)
+- `owner_id` (uuid, fk users)
+- `garment_id` (uuid, fk garments)
+- `status` (text: open, accepted, rejected, expired)
+- `agreed_price_usd` (int, nullable)
+- `agreed_handoff` (jsonb, nullable: {type: "calendar_event"|"shipping", event_id, datetime, location})
+- `turn_count` (int, default 0)
+- `created_at` (timestamptz)
+- `closed_at` (timestamptz, nullable)
+
+### `negotiation_messages`
+- `id` (uuid, pk)
+- `negotiation_id` (uuid, fk rental_negotiations)
+- `speaker` (text: "requester_agent" | "owner_agent")
+- `content` (text)
+- `tool_call` (jsonb, nullable)
+- `created_at` (timestamptz)
+
+### `calendar_events_cache` (denormalized for fast agent access) [implied]
+- `id` (uuid, pk)
+- `user_id` (uuid, fk users)
+- `google_event_id` (text)
+- `title` (text)
+- `start_at` (timestamptz)
+- `end_at` (timestamptz)
+- `attendee_emails` (text[])
+- `location` (text, nullable)
+- `fetched_at` (timestamptz)
+
+## API Surface
+
+### Ingestion
+- `POST /api/ingest/upload` — Accepts ZIP or multi-file form-data, creates `photos` rows, kicks off background processing, returns `{batch_id}`
+- `GET /api/ingest/stream?batch_id=...` — SSE endpoint streaming per-photo and per-garment events as they process
+- `POST /api/ingest/merge` — Body `{garment_ids: [a, b]}`, manually merges two duplicate garments [implied safety valve]
+
+### Closet
+- `GET /api/closet?user_id=...` — Returns paginated list of garments with filters (category, color, brand)
+- `GET /api/closet/:garment_id` — Full garment detail including contributing photos
+- `PATCH /api/closet/:garment_id` — Edit attributes or toggle `vault`
+
+### Wishlist + Search
+- `POST /api/wishlist` — Body `{query_text, reference_image?, max_price?}`, creates wishlist item and triggers friend-graph scan
+- `POST /api/search/friend-closets` — Body `{query_text | image}`, returns ranked matches across friend closets
+
+### Negotiation
+- `POST /api/negotiations/start` — Body `{requester_id, owner_id, garment_id}`, creates negotiation, spawns both agents
+- `GET /api/negotiations/:id/stream` — SSE endpoint streaming agent messages turn-by-turn
+- `POST /api/negotiations/:id/accept` — Body `{user_id}`, user approves current proposed deal
+- `POST /api/negotiations/:id/reject` — Body `{user_id}`, kills negotiation
+
+### Calendar
+- `GET /api/calendar/connect` — OAuth init for Google Calendar
+- `GET /api/calendar/callback` — OAuth callback, stores token
+- `GET /api/calendar/shared?user_a=...&user_b=...&within_days=14` — Returns events both users attend in window
+
+### Debug / Demo
+- `POST /api/demo/seed` — Seeds two hardcoded users, their friendships, and pre-ingested closets [implied for reset-between-demos safety]
+- `POST /api/demo/trigger-scenario` — Runs canned wishlist query guaranteed to surface match
+
+## Phase 1: Project Setup and Infrastructure
+
+**Goal:** Scaffold the repo, database, and external API clients so every later phase has a working substrate.
+
+- [ ] Initialize Next.js app with App Router, TypeScript, Tailwind (`pnpm create next-app`)
+- [ ] Add Postgres locally via Docker Compose with `pgvector/pgvector:pg16` image
+- [ ] Install deps: `@anthropic-ai/sdk`, `@google/generative-ai`, `pg`, `drizzle-orm` or `prisma`, `zod`, `googleapis`
+- [ ] Create `.env.local` with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- [ ] Set up Drizzle schema files in `/db/schema.ts` reflecting Data Models above
+- [ ] Run initial migration; enable `CREATE EXTENSION vector;`
+- [ ] Add HNSW indexes on both `image_embedding` and `text_embedding` columns (cosine distance)
+- [ ] Stand up FashionCLIP inference. Two options: (a) local Python microservice on `localhost:8001` exposing `POST /embed` accepting image bytes, returning 512-dim float array, or (b) Replicate API call. Pick (a) if GPU available locally, (b) otherwise.
+- [ ] Create `/lib/clients/` with wrappers: `anthropic.ts`, `gemini.ts`, `fashionclip.ts`, `google-calendar.ts`
+- [ ] Add simple session helper in `/lib/session.ts` that returns one of two hardcoded user ids based on a `?as=alice|bob` query param
+- [ ] Build `/app/layout.tsx` with user switcher in header
+
+**Gotcha:** pgvector HNSW indexes must be created after some data exists for best results, but create them early to catch syntax issues. Use `vector_cosine_ops`.
+
+## Phase 2: Vision Ingestion Pipeline (The Spike)
+
+**Goal:** User drops a ZIP, closet populates live in the UI. This is the hero moment. Every other phase depends on this working.
+
+- [ ] Build `POST /api/ingest/upload` in `/app/api/ingest/upload/route.ts`
+  - Input: multipart form-data with ZIP or multiple image files
+  - Unzip to `/tmp/batch_<uuid>/`, insert `photos` rows, return `batch_id`
+  - Spawn async job (in-process worker or `setImmediate` loop) to process
+- [ ] Implement person-filter in `/lib/ingest/filter.ts`
+  - Cheap CLIP or heuristic: Gemini Flash call "does this image contain visible clothing on a person?" returning boolean
+  - Skip non-clothing photos early to save API cost [implied]
+- [ ] Implement garment extraction in `/lib/ingest/extract.ts`
+  - Batch 4-6 photos per Gemini 2.5 Flash call
+  - Strict JSON schema output (use `responseSchema` param): { garments: [{ photo_index, bbox: {x,y,w,h}, category, subcategory, color_primary, color_secondary, pattern, silhouette, brand_guess, brand_confidence, description }] }
+  - Include 3-shot examples in the system prompt
   - Parse, validate with Zod, drop any garment with `confidence < 0.4`
 - [ ] Crop each garment from source photo per bbox, save crop, run FashionCLIP to get image embedding
 - [ ] Run Gemini `text-embedding-004` on `description` field
