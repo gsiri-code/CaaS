@@ -55,6 +55,17 @@ def health():
     return {"status": "ok", "device": DEVICE, "dims": DIMS, "model": MODEL_NAME}
 
 
+def _to_flat_list(feats):
+    """Coerce whatever get_*_features returned into a flat 512-dim float list."""
+    if hasattr(feats, "image_embeds"):
+        feats = feats.image_embeds
+    elif hasattr(feats, "text_embeds"):
+        feats = feats.text_embeds
+    elif hasattr(feats, "pooler_output"):
+        feats = feats.pooler_output
+    return feats.view(-1).cpu().tolist()
+
+
 @app.post("/embed/image")
 def embed_image(req: ImageRequest):
     try:
@@ -68,8 +79,10 @@ def embed_image(req: ImageRequest):
 
     inputs = PROCESSOR(images=img, return_tensors="pt").to(DEVICE)
     with torch.no_grad():
-        feats = MODEL.get_image_features(**inputs)
-    return {"embedding": feats[0].cpu().tolist()}
+        vision_outputs = MODEL.vision_model(**inputs)
+        pooled = vision_outputs[1]  # pooler_output
+        feats = MODEL.visual_projection(pooled)
+    return {"embedding": _to_flat_list(feats)}
 
 
 @app.post("/embed/text")
@@ -78,5 +91,7 @@ def embed_text(req: TextRequest):
         raise HTTPException(status_code=400, detail="text is empty")
     inputs = PROCESSOR(text=[req.text], return_tensors="pt", padding=True, truncation=True).to(DEVICE)
     with torch.no_grad():
-        feats = MODEL.get_text_features(**inputs)
-    return {"embedding": feats[0].cpu().tolist()}
+        text_outputs = MODEL.text_model(**inputs)
+        pooled = text_outputs[1]  # pooler_output
+        feats = MODEL.text_projection(pooled)
+    return {"embedding": _to_flat_list(feats)}
