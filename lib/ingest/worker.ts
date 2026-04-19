@@ -78,7 +78,7 @@ export async function processBatch(batchId: string, userId: string, items: Worke
             await writeBytes(cropAbs, cropped.bytes);
             const cropUrl = cropPublicUrl(batchId, cropId);
 
-            const imageVec = await embedCrop(cropUrl);
+            const imageVec = await embedCrop(cropped.bytes);
             const dup = await findDuplicate({
               userId,
               category: g.category,

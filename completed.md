@@ -88,13 +88,13 @@ Rolling log of what's been built, what broke, how it was fixed, and context futu
 - `GET /api/ingest/stream` with no `batch_id` → 400 `batch_id required`
 - Sample multipart POST (no files) reaches business logic without module-resolution errors
 
-### Not yet verified (requires real API keys)
+### Not yet verified (requires external services running)
 
-Worker's actual filter/extract/embed paths all call external APIs currently stubbed with `placeholder_...` values. End-to-end runs will emit `batch_error` until real keys are pasted into `.env.local`:
-- `GEMINI_API_KEY` — for filter + extraction + text embeddings
-- `REPLICATE_API_TOKEN` + `REPLICATE_FASHIONCLIP_MODEL` + `REPLICATE_FASHIONCLIP_VERSION` — for image embeddings (pick a concrete model on replicate.com/explore before use)
+Worker's actual filter/extract/embed paths need:
+- **Gemini** (`GEMINI_API_KEY` in `.env.local`) — for filter + extraction + text embeddings. Get from aistudio.google.com.
+- **FashionCLIP local Python service** — `uvicorn fashionclip_service:app --port 8001`. Model: `patrickjohncyh/fashion-clip`, CLIP ViT-B/32 fine-tune → 512-dim (matches schema). Decision: local over Replicate because zero per-call cost, no cold starts, M4 MPS handles it, and cleanup is `rm -rf fashionclip_env ~/.cache/huggingface` (~2.5GB gone). `FASHIONCLIP_URL` defaults to `http://localhost:8001`; override via env if hosted elsewhere.
 
-Once keys are set, TODO § "After Phase 2" checkpoints become testable (20-photo ZIP → grid in <30s, dedup behavior, false-split bias, per-photo cost < $1).
+Once both are up, TODO § "After Phase 2" checkpoints become testable (20-photo ZIP → grid in <30s, dedup behavior, false-split bias, per-photo cost < $1).
 
 ### Errors encountered + fixes (Phase 2)
 
@@ -110,4 +110,10 @@ Once keys are set, TODO § "After Phase 2" checkpoints become testable (20-photo
 - **Hero crop replacement** is currently NEVER done on merge (we pass `newCropBeatsHero: false`). The TODO says "keep higher-confidence crop as hero" — we'd need to store `extraction_confidence` alongside the hero to compare. Deferred; revisit in Phase 3 or during rehearsal if hero crops look bad.
 - **HEIC handling** is untested. `sharp` supports HEIC only with libvips built with libheif; the Replicate call won't care if the public URL is `.heic`. If Safari users upload HEIC, this may break — consider converting to JPEG at upload time if it becomes an issue.
 - **Public uploads dir** — crops and photos both live under `public/uploads/`. Add `.gitkeep` + ignore rule if we start committing. Currently un-ignored; will bloat the repo if committed.
-- **FashionCLIP output dim** is asserted to be 512. If a non-FashionCLIP Replicate model is swapped in with different dims, the `garments.image_embedding` column type needs to match — and a schema migration is required. Don't change the env var without checking dims.
+- **FashionCLIP output dim** is asserted to be 512. If a non-FashionCLIP model is swapped in with different dims, the `garments.image_embedding` column type needs to match — and a schema migration is required. Don't change the underlying model without checking dims.
+- **FashionCLIP service contract:** local FastAPI service at `FASHIONCLIP_URL` (default `http://localhost:8001`) exposing `POST /embed/image` and `POST /embed/text`, both accepting JSON `{image: base64}` / `{text}` and returning `{embedding: number[]}`. Our TS client (`lib/clients/fashionclip.ts`) and `embedCrop` (`lib/ingest/embed.ts`) assume this shape — changing the Python side's request/response shape means updating both here.
+- **FashionCLIP install layout:** everything lives under `fashionclip/`. Committed to git: `service.py`, `requirements.txt`, `start.sh`, `.gitignore`. Gitignored: `venv/`, `hf-cache/`, `__pycache__/`. `start.sh` sets `HF_HOME="$PWD/hf-cache"` so model weights (~600MB) stay inside the project dir rather than polluting `~/.cache/huggingface`.
+  - **First-time setup:** `cd fashionclip && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`, then `./start.sh` (auto-downloads the model on first run).
+  - **Run each session:** `./fashionclip/start.sh` from the repo root.
+  - **Nuke everything reclaimable (~2.5GB):** `rm -rf fashionclip/venv fashionclip/hf-cache`. The committed code stays. Nuke the whole dir if you also want the code gone.
+- **CLIP text embeddings are available but unused by default.** `embedTextClip` is exported for completeness but the garment schema uses Gemini `text-embedding-004` (768-dim) for descriptions, not CLIP text (512-dim). Don't mix — they live in different embedding spaces and kNN won't be meaningful across them.

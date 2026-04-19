@@ -32,11 +32,8 @@ export async function cropGarment(
   return { bytes, width: w, height: h };
 }
 
-export async function embedCrop(publicUrl: string): Promise<number[]> {
-  const absUrl = publicUrl.startsWith("http")
-    ? publicUrl
-    : `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}${publicUrl}`;
-  const vec = await embedImage(absUrl);
+export async function embedCrop(cropBytes: Buffer): Promise<number[]> {
+  const vec = await embedImage(cropBytes);
   if (vec.length !== FASHIONCLIP_DIMS) {
     throw new Error(
       `FashionCLIP returned ${vec.length} dims, schema expects ${FASHIONCLIP_DIMS}`,
