@@ -43,34 +43,10 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
       error: null,
     });
     setCards([
-      {
-        id: as === "alice" ? "g-alice-1" : "g-bob-1",
-        category: "Dress",
-        heroUrl:
-          "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80",
-        brandGuess: "Vince",
-      },
-      {
-        id: as === "alice" ? "g-alice-2" : "g-bob-2",
-        category: "Outerwear",
-        heroUrl:
-          "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80",
-        brandGuess: "Aritzia",
-      },
-      {
-        id: as === "alice" ? "g-alice-1" : "g-bob-1",
-        category: "Shoes",
-        heroUrl:
-          "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
-        brandGuess: "Common Projects",
-      },
-      {
-        id: as === "alice" ? "g-alice-2" : "g-bob-2",
-        category: "Top",
-        heroUrl:
-          "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
-        brandGuess: "Demo Atelier",
-      },
+      { id: as === "alice" ? "g-alice-1" : "g-bob-1", category: "Dress", heroUrl: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80", brandGuess: "Vince" },
+      { id: as === "alice" ? "g-alice-2" : "g-bob-2", category: "Outerwear", heroUrl: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80", brandGuess: "Aritzia" },
+      { id: as === "alice" ? "g-alice-1" : "g-bob-1", category: "Shoes", heroUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80", brandGuess: "Common Projects" },
+      { id: as === "alice" ? "g-alice-2" : "g-bob-2", category: "Top", heroUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80", brandGuess: "Demo Atelier" },
     ]);
   }
 
@@ -97,21 +73,11 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
         const event = JSON.parse(ev.data);
         if (event.type === "garment_created") {
           setCards((c) => [
-            {
-              id: event.garmentId,
-              category: event.category,
-              heroUrl: event.heroUrl,
-              brandGuess: event.brandGuess,
-            },
+            { id: event.garmentId, category: event.category, heroUrl: event.heroUrl, brandGuess: event.brandGuess },
             ...c,
           ]);
         } else if (event.type === "batch_progress") {
-          setStatus((s) => ({
-            ...s,
-            photosDone: event.photosDone,
-            photosTotal: event.photosTotal,
-            garmentsTotal: event.garmentsTotal,
-          }));
+          setStatus((s) => ({ ...s, photosDone: event.photosDone, photosTotal: event.photosTotal, garmentsTotal: event.garmentsTotal }));
         } else if (event.type === "batch_complete") {
           setStatus((s) => ({ ...s, done: true }));
           source.close();
@@ -120,47 +86,51 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
           source.close();
         }
       };
-      source.onerror = () => {
-        source.close();
-      };
+      source.onerror = () => { source.close(); };
     },
     [as],
   );
 
-  const progressPct =
-    status.photosTotal > 0
-      ? Math.round((status.photosDone / status.photosTotal) * 100)
-      : 0;
+  const progressPct = status.photosTotal > 0 ? Math.round((status.photosDone / status.photosTotal) * 100) : 0;
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Hero */}
-      <div className="px-6 pt-16 pb-2">
-        <h1 className="text-[28px] font-light tracking-tight leading-[34px]">
-          Import Your{"\n"}Closet
+      <div className="px-6 pt-20 pb-4 animate-fade-up">
+        <p className="text-[11px] tracking-[0.2em] uppercase mb-4" style={{ color: "var(--accent)" }}>
+          Wardrobe Import
+        </p>
+        <h1
+          className="text-[36px] leading-[1.1] font-light tracking-[-0.02em]"
+          style={{ fontFamily: "var(--font-serif)" }}
+        >
+          Import Your<br />Closet
         </h1>
-        <p className="mt-3 text-[15px] text-[#757575]">
+        <p className="mt-4 text-[15px] leading-relaxed" style={{ color: "var(--muted)" }}>
           Open your camera roll to get started.
         </p>
       </div>
 
       {/* Buttons */}
-      <div className="px-6 py-6 flex flex-col gap-3">
+      <div className="px-6 pt-4 pb-6 flex flex-col gap-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
         <button
           onClick={() => inputRef.current?.click()}
-          className="h-12 rounded bg-black text-white text-[15px] font-medium flex items-center justify-center"
+          className="h-[52px] rounded-xl text-[15px] font-medium flex items-center justify-center transition-all duration-200 hover:opacity-90 active:scale-[0.98]"
+          style={{ background: "var(--fg)", color: "var(--bg)" }}
         >
           Open Camera Roll
         </button>
         <button
           onClick={() => inputRef.current?.click()}
-          className="h-12 rounded border border-black/8 text-[15px] font-medium flex items-center justify-center"
+          className="h-[52px] rounded-xl text-[15px] font-medium flex items-center justify-center border transition-all duration-200 hover:bg-[var(--surface)] active:scale-[0.98]"
+          style={{ borderColor: "var(--border-strong)" }}
         >
           Take New Photos
         </button>
         <button
           onClick={loadDemoPreview}
-          className="h-11 rounded text-[14px] text-[#757575] bg-[#F7F7F7] flex items-center justify-center"
+          className="h-11 rounded-xl text-[13px] flex items-center justify-center transition-all duration-200 hover:opacity-80"
+          style={{ background: "var(--surface)", color: "var(--muted)" }}
         >
           Load Demo Import
         </button>
@@ -170,32 +140,32 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
           multiple
           accept=".zip,image/*"
           className="hidden"
-          onChange={(e) => {
-            if (e.target.files) onFiles(e.target.files);
-          }}
+          onChange={(e) => { if (e.target.files) onFiles(e.target.files); }}
         />
       </div>
 
       {/* Progress */}
       {status.batchId && (
-        <div className="px-6 py-3">
-          <div className="h-0.5 bg-black/8 rounded-full overflow-hidden">
+        <div className="px-6 py-4 animate-fade-up">
+          <div className="h-[3px] rounded-full overflow-hidden" style={{ background: "var(--surface)" }}>
             <div
-              className="h-full bg-black rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPct}%`, background: "var(--accent)" }}
             />
           </div>
-          <div className="mt-2 flex justify-between text-[13px] text-[#757575]">
-            <span>
+          <div className="mt-3 flex justify-between text-[12px]" style={{ color: "var(--muted)" }}>
+            <span className="tracking-wide">
               Processing {status.photosDone} / {status.photosTotal || "?"} photos
             </span>
-            <span>{status.garmentsTotal} items</span>
+            <span className="font-medium">{status.garmentsTotal} items</span>
           </div>
           {status.done && !status.error && (
-            <p className="mt-1 text-[13px] text-emerald-600 font-medium">Complete</p>
+            <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--success)" }}>
+              Import complete
+            </p>
           )}
           {status.error && (
-            <p className="mt-1 text-[13px] text-red-600">Error: {status.error}</p>
+            <p className="mt-2 text-[12px]" style={{ color: "var(--error)" }}>Error: {status.error}</p>
           )}
         </div>
       )}
@@ -204,29 +174,27 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
       {cards.length > 0 && (
         <div className="px-6 pt-2 pb-4">
           <div className="grid grid-cols-2 gap-4">
-            {cards.map((c) => (
+            {cards.map((c, i) => (
               <Link
-                key={c.id}
+                key={`${c.id}-${c.category}`}
                 href={`/closet/${c.id}?as=${as}`}
-                className="no-underline text-black"
+                className="no-underline animate-fade-up group"
+                style={{ animationDelay: `${0.05 * i}s`, color: "var(--fg)" }}
               >
-                <div className="rounded overflow-hidden">
+                <div className="overflow-hidden rounded-xl" style={{ boxShadow: "var(--shadow-sm)" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={c.heroUrl}
                     alt={c.category}
-                    className="w-full aspect-[163/200] object-cover bg-[#F0F0F0]"
+                    className="w-full aspect-[4/5] object-cover transition-transform duration-500 group-hover:scale-105"
+                    style={{ background: "var(--surface)" }}
                   />
-                  <div className="pt-2">
-                    <p className="text-[14px] font-medium capitalize leading-tight">
-                      {c.category}
-                    </p>
-                    {c.brandGuess && (
-                      <p className="text-[12px] text-[#757575] mt-0.5">
-                        {c.brandGuess}
-                      </p>
-                    )}
-                  </div>
+                </div>
+                <div className="pt-2.5 px-0.5">
+                  <p className="text-[14px] font-medium capitalize leading-tight">{c.category}</p>
+                  {c.brandGuess && (
+                    <p className="text-[11px] mt-0.5 tracking-wide" style={{ color: "var(--muted)" }}>{c.brandGuess}</p>
+                  )}
                 </div>
               </Link>
             ))}

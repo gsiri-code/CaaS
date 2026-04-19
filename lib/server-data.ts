@@ -248,16 +248,18 @@ export async function patchNegotiation(
 export async function createIngestBatch(asKey: DemoUserKey) {
   return withFallback(
     async () => {
-      const route = await import("@/app/api/ingest/upload/route");
-      return route.createRealIngestBatch(asKey);
+      // Real ingest requires a FormData from the upload route; this path only handles mock
+      throw new Error("use upload route for real ingest");
     },
     () => {
+      const { emitIngest } = require("@/lib/ingest/events") as typeof import("@/lib/ingest/events");
       const batch = createMockIngestBatch(asKey);
-      const bus = createBus(batch.batchId);
+      createBus(batch.batchId);
       let delay = 0;
       for (const event of batch.events) {
         delay += 250;
-        setTimeout(() => bus.push(event), delay);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setTimeout(() => emitIngest(batch.batchId, event as any), delay);
       }
       return { batch_id: batch.batchId, accepted: batch.accepted };
     },

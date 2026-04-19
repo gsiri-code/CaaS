@@ -13,7 +13,7 @@ import type {
 const CATEGORIES = ["All", "Tops", "Bottoms", "Dresses", "Shoes", "Outerwear"];
 
 function timeAgo(date: string | null) {
-  if (!date) return "—";
+  if (!date) return "\u2014";
   const diff = Date.now() - new Date(date).getTime();
   const days = Math.floor(diff / 86400000);
   if (days < 7) return `${days}d`;
@@ -61,25 +61,19 @@ export default function ClosetClient({
         setGarments(data);
         setLoading(false);
       })
-      .catch(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
+      .catch(() => { if (cancelled) return; setLoading(false); });
     return () => { cancelled = true; };
   }, [as]);
 
   async function handleCardClick(g: Garment) {
     setActive(g);
-    // Fetch detail data for expanded view
     try {
       const res = await fetch(`/api/closet/${g.id}?as=${as}`);
       if (res.ok) {
         const detail: GarmentDetailResponse = await res.json();
         setActive((prev) => (prev?.id === g.id ? { ...prev, detail } : prev));
       }
-    } catch {
-      // detail fetch failed, expanded card still shows basic info
-    }
+    } catch { /* detail fetch failed */ }
   }
 
   async function toggleVault() {
@@ -99,17 +93,17 @@ export default function ClosetClient({
   const filtered = garments.filter((g) => {
     if (filter !== "All") {
       const cat = g.category.toLowerCase();
-      const filterLower = filter.toLowerCase();
-      if (filterLower === "tops" && !["top", "tops", "blouse", "shirt", "sweater", "tee"].some((k) => cat.includes(k))) return false;
-      if (filterLower === "bottoms" && !["bottom", "bottoms", "pants", "jeans", "shorts", "skirt"].some((k) => cat.includes(k))) return false;
-      if (filterLower === "dresses" && !cat.includes("dress")) return false;
-      if (filterLower === "shoes" && !["shoe", "shoes", "sneaker", "boot", "sandal"].some((k) => cat.includes(k))) return false;
-      if (filterLower === "outerwear" && !["coat", "jacket", "outerwear", "blazer", "cardigan"].some((k) => cat.includes(k))) return false;
+      const fl = filter.toLowerCase();
+      if (fl === "tops" && !["top", "tops", "blouse", "shirt", "sweater", "tee"].some((k) => cat.includes(k))) return false;
+      if (fl === "bottoms" && !["bottom", "bottoms", "pants", "jeans", "shorts", "skirt"].some((k) => cat.includes(k))) return false;
+      if (fl === "dresses" && !cat.includes("dress")) return false;
+      if (fl === "shoes" && !["shoe", "shoes", "sneaker", "boot", "sandal"].some((k) => cat.includes(k))) return false;
+      if (fl === "outerwear" && !["coat", "jacket", "outerwear", "blazer", "cardigan"].some((k) => cat.includes(k))) return false;
     }
     if (search) {
       const q = search.toLowerCase();
-      const searchable = `${g.category} ${g.subcategory ?? ""} ${g.brandGuess ?? ""}`.toLowerCase();
-      if (!searchable.includes(q)) return false;
+      const s = `${g.category} ${g.subcategory ?? ""} ${g.brandGuess ?? ""}`.toLowerCase();
+      if (!s.includes(q)) return false;
     }
     return true;
   });
@@ -117,32 +111,37 @@ export default function ClosetClient({
   const detail = active?.detail;
   const tags = detail
     ? [detail.brandGuess, detail.subcategory || detail.category, detail.colorPrimary, detail.pattern].filter(Boolean)
-    : active
-      ? [active.brandGuess, active.subcategory || active.category].filter(Boolean)
-      : [];
+    : active ? [active.brandGuess, active.subcategory || active.category].filter(Boolean) : [];
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-14 pb-2 flex items-center justify-between">
-        <h1 className="text-[22px] font-semibold">{userName}&apos;s Closet</h1>
-        <div className="flex -space-x-2">
-          <div className="w-7 h-7 rounded-full bg-[#E8D5C4] border-2 border-white" />
-          <div className="w-7 h-7 rounded-full bg-[#C4D5E8] border-2 border-white" />
+      <div className="px-6 pt-16 pb-2 flex items-end justify-between animate-fade-up">
+        <div>
+          <p className="text-[11px] tracking-[0.2em] uppercase mb-2" style={{ color: "var(--accent)" }}>Collection</p>
+          <h1 className="text-[30px] leading-[1.1] font-light tracking-[-0.02em]" style={{ fontFamily: "var(--font-serif)" }}>
+            {userName}&apos;s Closet
+          </h1>
+        </div>
+        <div className="flex -space-x-2 mb-1.5">
+          <div className="w-8 h-8 rounded-full border-2 border-[var(--bg)]" style={{ background: "linear-gradient(135deg, #E8D5C4, #D4C0AE)" }} />
+          <div className="w-8 h-8 rounded-full border-2 border-[var(--bg)]" style={{ background: "linear-gradient(135deg, #C4D5E8, #AEC0D4)" }} />
         </div>
       </div>
 
       {/* Filter Chips */}
-      <div className="px-6 py-3 flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="px-6 py-3 flex gap-2 overflow-x-auto no-scrollbar animate-fade-up" style={{ animationDelay: "0.05s" }}>
         {CATEGORIES.map((cat) => (
           <button
             key={cat}
             onClick={() => setFilter(cat)}
-            className={`h-8 px-3.5 rounded text-[14px] font-medium whitespace-nowrap transition-colors ${
-              filter === cat
-                ? "bg-black text-white"
-                : "bg-transparent text-black/60 border border-black/10"
-            }`}
+            className="h-8 px-4 rounded-full text-[12px] tracking-wide uppercase whitespace-nowrap transition-all duration-200"
+            style={{
+              background: filter === cat ? "var(--fg)" : "transparent",
+              color: filter === cat ? "var(--bg)" : "var(--muted)",
+              border: filter === cat ? "none" : "1px solid var(--border-strong)",
+              fontWeight: filter === cat ? 600 : 400,
+            }}
           >
             {cat}
           </button>
@@ -150,9 +149,9 @@ export default function ClosetClient({
       </div>
 
       {/* Search */}
-      <div className="px-6 pt-1 pb-3">
-        <div className="flex items-center h-10 rounded-lg bg-[#F8F8F8] px-3 gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <div className="px-6 pt-1 pb-4 animate-fade-up" style={{ animationDelay: "0.1s" }}>
+        <div className="flex items-center h-11 rounded-xl px-4 gap-3" style={{ background: "var(--surface)" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -161,165 +160,106 @@ export default function ClosetClient({
             placeholder="Search closet..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#999]"
+            className="flex-1 bg-transparent text-[14px] outline-none"
+            style={{ color: "var(--fg)" }}
           />
         </div>
       </div>
 
-      {/* Backdrop overlay */}
+      {/* Backdrop */}
       <AnimatePresence>
         {active && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 z-10"
+            className="fixed inset-0 z-10"
+            style={{ background: "rgba(26, 24, 22, 0.3)", backdropFilter: "blur(8px)" }}
           />
         )}
       </AnimatePresence>
 
-      {/* Expanded card */}
+      {/* Expanded Card */}
       <AnimatePresence>
         {active && (
-          <div className="fixed inset-0 grid place-items-center z-[100]">
+          <div className="fixed inset-0 grid place-items-center z-[100] p-4">
             <motion.button
               key={`close-${active.id}-${id}`}
               layout
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, transition: { duration: 0.05 } }}
-              className="absolute top-4 right-4 flex items-center justify-center bg-white rounded-full h-8 w-8 shadow-sm z-10"
+              className="absolute top-5 right-5 flex items-center justify-center w-9 h-9 rounded-full z-10 backdrop-blur-md transition-colors"
+              style={{ background: "rgba(255,255,255,0.8)", border: "1px solid var(--border)" }}
               onClick={() => setActive(null)}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6L6 18" />
-                <path d="M6 6l12 12" />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18" /><path d="M6 6l12 12" />
               </svg>
             </motion.button>
 
             <motion.div
               layoutId={`card-${active.id}-${id}`}
               ref={expandedRef}
-              className="w-full max-w-[500px] h-full md:h-fit md:max-h-[90%] flex flex-col bg-white sm:rounded-3xl overflow-y-auto"
+              className="w-full max-w-[500px] h-full md:h-fit md:max-h-[90%] flex flex-col overflow-y-auto sm:rounded-2xl"
+              style={{ background: "var(--bg)", boxShadow: "var(--shadow-lg)" }}
             >
               <motion.div layoutId={`image-${active.id}-${id}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={active.heroImageUrl}
-                  alt={active.category}
-                  className="w-full aspect-square object-cover bg-[#F0F0F0]"
-                />
+                <img src={active.heroImageUrl} alt={active.category} className="w-full aspect-square object-cover" style={{ background: "var(--surface)" }} />
               </motion.div>
 
-              {/* Source Photos */}
               {detail && detail.photos.length > 0 && (
-                <motion.div
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="px-5 pt-3 flex gap-2 overflow-x-auto no-scrollbar"
-                >
+                <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-5 pt-4 flex gap-2 overflow-x-auto no-scrollbar">
                   {detail.photos.map((p) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={p.id}
-                      src={p.fileUrl}
-                      alt="source"
-                      className="w-12 h-12 rounded object-cover bg-[#E8E8E8] flex-shrink-0"
-                    />
+                    <img key={p.id} src={p.fileUrl} alt="source" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" style={{ background: "var(--surface)" }} />
                   ))}
                 </motion.div>
               )}
 
-              <div className="p-5">
-                {/* Title */}
-                <motion.h3
-                  layoutId={`title-${active.id}-${id}`}
-                  className="text-[20px] font-semibold"
-                >
+              <div className="p-5 pt-4">
+                <motion.h3 layoutId={`title-${active.id}-${id}`} className="text-[22px] font-light tracking-[-0.01em]" style={{ fontFamily: "var(--font-serif)" }}>
                   {active.subcategory || active.category}
                 </motion.h3>
-                <motion.p
-                  layoutId={`brand-${active.id}-${id}`}
-                  className="text-[13px] text-[#757575] mt-0.5"
-                >
+                <motion.p layoutId={`brand-${active.id}-${id}`} className="text-[12px] mt-1 tracking-wide" style={{ color: "var(--muted)" }}>
                   {active.brandGuess ?? active.category}
-                  {active.vault ? " · Vaulted" : ""}
+                  {active.vault ? " \u00b7 Vaulted" : ""}
                 </motion.p>
 
-                {/* Tags */}
-                <motion.div
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-wrap gap-1.5 mt-3"
-                >
+                <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-wrap gap-1.5 mt-4">
                   {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2.5 py-1 rounded bg-[#F5F5F5] text-[12px] text-[#555] capitalize"
-                    >
+                    <span key={tag} className="px-3 py-1 rounded-full text-[11px] tracking-wide capitalize" style={{ background: "var(--surface)", color: "var(--muted)" }}>
                       {tag}
                     </span>
                   ))}
                 </motion.div>
 
-                {/* Vault Toggle */}
-                <motion.div
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center justify-between mt-5"
-                >
+                {/* Vault toggle */}
+                <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-between mt-6 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
                   <div>
                     <p className="text-[14px] font-medium">Vault</p>
-                    <p className="text-[12px] text-[#757575] mt-0.5">
-                      {active.vault
-                        ? "Not available for rent"
-                        : "Friends can rent this item"}
+                    <p className="text-[12px] mt-0.5" style={{ color: "var(--muted)" }}>
+                      {active.vault ? "Not available for rent" : "Friends can rent this item"}
                     </p>
                   </div>
-                  <button
-                    onClick={toggleVault}
-                    className={`w-11 h-[26px] rounded-full relative transition-colors ${
-                      active.vault ? "bg-black" : "bg-black/15"
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-[2px] w-[22px] h-[22px] rounded-full bg-white shadow-sm transition-transform ${
-                        active.vault ? "left-[24px]" : "left-[2px]"
-                      }`}
-                    />
+                  <button onClick={toggleVault} className="w-12 h-[28px] rounded-full relative transition-all duration-300" style={{ background: active.vault ? "var(--accent)" : "var(--border-strong)" }}>
+                    <div className="absolute top-[3px] w-[22px] h-[22px] rounded-full bg-white transition-all duration-300" style={{ left: active.vault ? "26px" : "3px", boxShadow: "var(--shadow-sm)" }} />
                   </button>
                 </motion.div>
 
                 {/* Stats */}
-                <motion.div
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex gap-8 mt-5 pt-4 border-t border-black/6"
-                >
-                  <div>
-                    <p className="text-[11px] text-[#999]">Est. Value</p>
-                    <p className="text-[18px] font-semibold mt-0.5">
-                      {active.estimatedValueUsd ? `$${active.estimatedValueUsd}` : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-[#999]">Worn</p>
-                    <p className="text-[18px] font-semibold mt-0.5">{active.wearCount}x</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-[#999]">Last Worn</p>
-                    <p className="text-[18px] font-semibold mt-0.5">
-                      {timeAgo(active.lastWornAt as string | null)}
-                    </p>
-                  </div>
+                <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid grid-cols-3 gap-4 mt-5 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
+                  {[
+                    { label: "Est. Value", value: active.estimatedValueUsd ? `$${active.estimatedValueUsd}` : "\u2014" },
+                    { label: "Worn", value: `${active.wearCount}x` },
+                    { label: "Last Worn", value: timeAgo(active.lastWornAt as string | null) },
+                  ].map((stat) => (
+                    <div key={stat.label}>
+                      <p className="text-[10px] tracking-[0.15em] uppercase" style={{ color: "var(--muted)" }}>{stat.label}</p>
+                      <p className="text-[20px] font-light mt-1" style={{ fontFamily: "var(--font-serif)" }}>{stat.value}</p>
+                    </div>
+                  ))}
                 </motion.div>
               </div>
             </motion.div>
@@ -330,52 +270,54 @@ export default function ClosetClient({
       {/* Grid */}
       <div className="px-6 pb-4 flex-1">
         {loading ? (
-          <div className="text-center text-[14px] text-[#999] py-12">Loading...</div>
+          <div className="grid grid-cols-2 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="animate-fade-up" style={{ animationDelay: `${0.05 * i}s` }}>
+                <div className="aspect-[4/5] rounded-xl animate-shimmer" />
+                <div className="mt-2.5 h-3 w-24 rounded animate-shimmer" />
+                <div className="mt-1.5 h-2.5 w-16 rounded animate-shimmer" />
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center text-[14px] text-[#999] py-12">
-            {garments.length === 0
-              ? "No garments yet. Import your closet first!"
-              : "No items match your filter."}
+          <div className="text-center py-16 animate-fade-up">
+            <p className="text-[24px] font-light" style={{ fontFamily: "var(--font-serif)", color: "var(--muted)" }}>
+              {garments.length === 0 ? "Your closet awaits" : "No matches found"}
+            </p>
+            <p className="text-[13px] mt-2" style={{ color: "var(--muted)" }}>
+              {garments.length === 0 ? "Import your first garments to get started." : "Try adjusting your filters."}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            {filtered.map((g) => (
+            {filtered.map((g, i) => (
               <motion.div
                 layoutId={`card-${g.id}-${id}`}
                 key={g.id}
                 onClick={() => handleCardClick(g)}
-                className="cursor-pointer rounded overflow-hidden"
+                className="cursor-pointer group animate-fade-up"
+                style={{ animationDelay: `${0.04 * i}s` }}
               >
                 <motion.div layoutId={`image-${g.id}-${id}`}>
-                  <div className="relative">
+                  <div className="relative overflow-hidden rounded-xl" style={{ boxShadow: "var(--shadow-sm)" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={g.heroImageUrl}
-                      alt={g.category}
-                      className="w-full aspect-[163/200] object-cover bg-[#F0F0F0]"
-                    />
+                    <img src={g.heroImageUrl} alt={g.category} className="w-full aspect-[4/5] object-cover transition-transform duration-700 group-hover:scale-105" style={{ background: "var(--surface)" }} />
                     {g.vault && (
-                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2">
-                          <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
+                      <div className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md" style={{ background: "rgba(255,255,255,0.8)" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
+                          <path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z" />
                         </svg>
                       </div>
                     )}
                   </div>
                 </motion.div>
-                <div className="pt-2">
-                  <motion.p
-                    layoutId={`title-${g.id}-${id}`}
-                    className="text-[14px] font-medium capitalize leading-tight truncate"
-                  >
+                <div className="pt-2.5 px-0.5">
+                  <motion.p layoutId={`title-${g.id}-${id}`} className="text-[14px] font-medium capitalize leading-tight truncate">
                     {g.subcategory || g.category}
                   </motion.p>
-                  <motion.p
-                    layoutId={`brand-${g.id}-${id}`}
-                    className="text-[12px] text-[#757575] mt-0.5 truncate"
-                  >
+                  <motion.p layoutId={`brand-${g.id}-${id}`} className="text-[11px] mt-0.5 truncate tracking-wide" style={{ color: "var(--muted)" }}>
                     {g.brandGuess ?? g.category}
-                    {g.vault ? " · Vaulted" : ""}
+                    {g.vault ? " \u00b7 Vaulted" : ""}
                   </motion.p>
                 </div>
               </motion.div>

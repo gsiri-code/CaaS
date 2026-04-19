@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Cormorant_Garamond, Outfit } from "next/font/google";
 import Link from "next/link";
 import BottomNav from "./components/bottom-nav";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -27,16 +29,26 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${outfit.variable} ${cormorant.variable} h-full`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-white text-black">
+      <body className="min-h-full flex flex-col">
         <div className="flex-1 pb-24">
           {children}
         </div>
         <div className="fixed top-3 right-3 flex gap-1.5 text-[11px] z-50">
-          <Link href="/?as=alice" className="px-2 py-1 rounded-full bg-black/5 text-black/60 no-underline">Alice</Link>
-          <Link href="/?as=bob" className="px-2 py-1 rounded-full bg-black/5 text-black/60 no-underline">Bob</Link>
+          <Link
+            href="/?as=alice"
+            className="px-2.5 py-1 rounded-full backdrop-blur-md bg-white/60 text-[var(--muted)] no-underline border border-[var(--border)] hover:bg-white/80 transition-colors"
+          >
+            Alice
+          </Link>
+          <Link
+            href="/?as=bob"
+            className="px-2.5 py-1 rounded-full backdrop-blur-md bg-white/60 text-[var(--muted)] no-underline border border-[var(--border)] hover:bg-white/80 transition-colors"
+          >
+            Bob
+          </Link>
         </div>
         <BottomNav />
       </body>
