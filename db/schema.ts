@@ -115,7 +115,7 @@ export const rentalNegotiations = pgTable("rental_negotiations", {
   status: text("status").notNull().default("open"),
   agreedPriceUsd: integer("agreed_price_usd"),
   agreedHandoff: jsonb("agreed_handoff").$type<{
-    type: "calendar_event" | "shipping";
+    type: "calendar_event" | "shipping" | "in_person";
     event_id?: string;
     datetime?: string;
     location?: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 type Match = {
   garment: {
@@ -21,7 +22,9 @@ type Match = {
 const CATEGORIES = ["", "top", "bottom", "dress", "outerwear", "shoe", "accessory"] as const;
 
 export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  const [requesting, setRequesting] = useState<string | null>(null);
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("");
   const [maxPrice, setMaxPrice] = useState("");
   const [refFile, setRefFile] = useState<File | null>(null);
@@ -196,14 +199,32 @@ export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
                     </div>
                     <button
                       type="button"
-                      className="mt-1 w-full px-2 py-1 rounded border border-black/15 dark:border-white/15 text-xs hover:bg-black/5 dark:hover:bg-white/5"
-                      onClick={() =>
-                        alert(
-                          `Phase 6 will spawn a negotiation agent for this item (${m.garment.id}). Not wired yet.`,
-                        )
-                      }
+                      disabled={requesting === m.garment.id}
+                      className="mt-1 w-full px-2 py-1 rounded border border-black/15 dark:border-white/15 text-xs hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40"
+                      onClick={async () => {
+                        setRequesting(m.garment.id);
+                        try {
+                          const res = await fetch("/api/negotiations/start", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              as: asKey,
+                              garment_id: m.garment.id,
+                              max_price_usd: maxPrice ? Number(maxPrice) : undefined,
+                            }),
+                          });
+                          if (!res.ok) throw new Error(await res.text());
+                          const data = (await res.json()) as { negotiation_id: string };
+                          router.push(
+                            `/negotiations/${data.negotiation_id}?as=${asKey}`,
+                          );
+                        } catch (e) {
+                          alert(`failed to start: ${e instanceof Error ? e.message : e}`);
+                          setRequesting(null);
+                        }
+                      }}
                     >
-                      request rental
+                      {requesting === m.garment.id ? "starting…" : "request rental"}
                     </button>
                   </div>
                 </div>
