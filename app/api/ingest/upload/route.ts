@@ -10,9 +10,7 @@ import { photos } from "@/db/schema";
 import { createBus } from "@/lib/ingest/events";
 import { ensureBatchDirs, photoPath, photoPublicUrl } from "@/lib/ingest/storage";
 import { processBatch, type WorkerPhoto } from "@/lib/ingest/worker";
-import { DEMO_USERS, isDemoUserKey } from "@/lib/demo-users";
-import { startMockIngestBatch } from "@/lib/app-data";
-import { shouldUseMockData } from "@/lib/session";
+import { getSessionUser, type DemoUserKey } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,18 +28,17 @@ const MIME_BY_EXT: Record<string, string> = {
 export async function POST(req: NextRequest) {
   const form = await req.formData();
   const asParam = form.get("as");
-  const asKey = typeof asParam === "string" && isDemoUserKey(asParam) ? asParam : "alice";
+  const user = await getSessionUser({ as: typeof asParam === "string" ? asParam : undefined });
 
-  if (shouldUseMockData() || !isDatabaseConfigured()) {
-    return NextResponse.json(await startMockIngestBatch(asKey));
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json({ error: "DATABASE_URL is not set" }, { status: 500 });
   }
 
-  const realBatch = await createRealIngestBatch(form, asKey);
+  const realBatch = await createRealIngestBatch(form, user.key, user.id);
   return NextResponse.json(realBatch);
 }
 
-export async function createRealIngestBatch(form: FormData, asKey: keyof typeof DEMO_USERS) {
-  const userId = DEMO_USERS[asKey].id;
+export async function createRealIngestBatch(form: FormData, asKey: DemoUserKey, userId: string) {
   const batchId = randomUUID();
   const { photosDir } = await ensureBatchDirs(batchId);
   const accepted: WorkerPhoto[] = [];

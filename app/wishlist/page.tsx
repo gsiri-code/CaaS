@@ -14,12 +14,20 @@ export default async function WishlistPage({
   const friendIds = await getFriendIds(user.id);
 
   return (
-    <div className="px-6 py-8 max-w-5xl">
-      <h1 className="text-2xl font-semibold">Wishlist</h1>
-      <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-        Browsing as {user.name} · {friendIds.length} friend{friendIds.length === 1 ? "" : "s"} in graph.
-      </p>
-      <WishlistClient asKey={user.name.toLowerCase() as "alice" | "bob"} />
+    <div className="min-h-screen flex flex-col pb-32">
+      <div className="px-6 pt-20 pb-2 animate-fade-up">
+        <p className="overline mb-4">Discover</p>
+        <h1 className="section-header text-[36px]">
+          Find Your Next Look
+        </h1>
+        <p
+          className="mt-3 text-[14px] tracking-wide"
+          style={{ color: "var(--muted)" }}
+        >
+          Browsing as {user.name} &middot; {friendIds.length} friend{friendIds.length === 1 ? "" : "s"} in your circle
+        </p>
+      </div>
+      <WishlistClient asKey={user.key} />
     </div>
   );
 }

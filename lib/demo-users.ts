@@ -2,20 +2,18 @@ export const DEMO_USERS = {
   alice: {
     key: "alice",
     id: "11111111-1111-4111-8111-111111111111",
-    name: "Alice",
-    email: "alice@demo.caas",
+    name: "Brian",
+    email: "brian@demo.caas",
     avatarUrl:
       "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&q=80",
-    mockData: true,
   },
   bob: {
     key: "bob",
     id: "22222222-2222-4222-8222-222222222222",
-    name: "Bob",
-    email: "bob@demo.caas",
+    name: "George",
+    email: "george@demo.caas",
     avatarUrl:
       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80",
-    mockData: true,
   },
 } as const;
 
@@ -40,10 +38,3 @@ export function getOtherDemoUser(key: DemoUserKey): DemoUser {
   return DEMO_USERS[key === "alice" ? "bob" : "alice"];
 }
 
-export function shouldUseMockIngest(v: string | undefined | null): boolean {
-  return isDemoUserKey(v) ? DEMO_USERS[v].mockData : false;
-}
-
-export function shouldUseMockDataForDemoUser(v: string | undefined | null): boolean {
-  return isDemoUserKey(v) ? DEMO_USERS[v].mockData : false;
-}

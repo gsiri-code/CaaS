@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { garments, garmentPhotos, photos } from "@/db/schema";
 import { embedText } from "@/lib/clients/gemini";
+import { getSessionUser } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -22,9 +23,13 @@ const patchSchema = z
   })
   .strict();
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const [row] = await db.select().from(garments).where(eq(garments.id, id));
+  const user = await getSessionUser({ as: req.nextUrl.searchParams.get("as") ?? undefined });
+  const [row] = await db
+    .select()
+    .from(garments)
+    .where(and(eq(garments.id, id), eq(garments.userId, user.id)));
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const contributors = await db
@@ -65,6 +70,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  const user = await getSessionUser({ as: req.nextUrl.searchParams.get("as") ?? undefined });
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -83,18 +89,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const [row] = await db
     .update(garments)
     .set(update)
-    .where(eq(garments.id, id))
+    .where(and(eq(garments.id, id), eq(garments.userId, user.id)))
     .returning({ id: garments.id });
 
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ id: row.id });
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  const user = await getSessionUser({ as: req.nextUrl.searchParams.get("as") ?? undefined });
   const rows = await db
     .delete(garments)
-    .where(eq(garments.id, id))
+    .where(and(eq(garments.id, id), eq(garments.userId, user.id)))
     .returning({ id: garments.id });
   if (rows.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ id: rows[0].id });

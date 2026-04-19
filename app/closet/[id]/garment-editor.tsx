@@ -45,7 +45,7 @@ export default function GarmentEditor({ garment, asKey }: { garment: Garment; as
       return;
     }
     setError(null);
-    setStatus("saving…");
+    setStatus("saving\u2026");
     startSaving(async () => {
       const res = await fetch(`/api/closet/${garment.id}`, {
         method: "PATCH",
@@ -75,87 +75,136 @@ export default function GarmentEditor({ garment, asKey }: { garment: Garment; as
   };
 
   return (
-    <div className="space-y-3 text-sm">
-      <label className="block">
-        <span className="text-xs text-black/60 dark:text-white/60">category</span>
+    <div className="space-y-5">
+      {/* Category */}
+      <FieldGroup label="Category">
         <select
           value={form.category}
           onChange={(e) => set("category", e.target.value)}
-          className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1"
+          className="input-editorial capitalize"
         >
           {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
-      </label>
+      </FieldGroup>
 
-      <Row label="subcategory" value={form.subcategory} onChange={(v) => set("subcategory", v)} />
-      <Row label="primary color" value={form.colorPrimary} onChange={(v) => set("colorPrimary", v)} />
-      <Row label="secondary color" value={form.colorSecondary} onChange={(v) => set("colorSecondary", v)} />
-      <Row label="pattern" value={form.pattern} onChange={(v) => set("pattern", v)} />
-      <Row label="silhouette" value={form.silhouette} onChange={(v) => set("silhouette", v)} />
-      <Row label="brand" value={form.brandGuess} onChange={(v) => set("brandGuess", v)} />
+      <div className="grid grid-cols-2 gap-4">
+        <Row label="Subcategory" value={form.subcategory} onChange={(v) => set("subcategory", v)} />
+        <Row label="Brand" value={form.brandGuess} onChange={(v) => set("brandGuess", v)} />
+      </div>
 
-      <label className="block">
-        <span className="text-xs text-black/60 dark:text-white/60">
-          description <span className="text-black/40">(editing re-embeds for search)</span>
-        </span>
+      <div className="grid grid-cols-2 gap-4">
+        <Row label="Primary Color" value={form.colorPrimary} onChange={(v) => set("colorPrimary", v)} />
+        <Row label="Secondary Color" value={form.colorSecondary} onChange={(v) => set("colorSecondary", v)} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Row label="Pattern" value={form.pattern} onChange={(v) => set("pattern", v)} />
+        <Row label="Silhouette" value={form.silhouette} onChange={(v) => set("silhouette", v)} />
+      </div>
+
+      {/* Description */}
+      <FieldGroup label="Description" hint="editing re-embeds for search">
         <textarea
           value={form.description}
           onChange={(e) => set("description", e.target.value)}
           rows={3}
-          className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1"
+          className="input-editorial resize-none"
         />
-      </label>
+      </FieldGroup>
 
-      <label className="block">
-        <span className="text-xs text-black/60 dark:text-white/60">estimated value (USD)</span>
+      {/* Value */}
+      <FieldGroup label="Estimated Value (USD)">
         <input
           type="number"
           value={form.estimatedValueUsd ?? ""}
           onChange={(e) =>
             set("estimatedValueUsd", e.target.value === "" ? null : Number(e.target.value))
           }
-          className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1"
+          className="input-editorial"
         />
-      </label>
+      </FieldGroup>
 
-      <label className="flex items-center gap-2 pt-2">
-        <input
-          type="checkbox"
-          checked={form.vault}
-          onChange={(e) => set("vault", e.target.checked)}
-        />
-        <span>
-          <span className="font-medium">vault</span>{" "}
-          <span className="text-xs text-black/60 dark:text-white/60">
-            — flag as untransactable (hidden from friend search / agents)
-          </span>
-        </span>
-      </label>
+      {/* Vault toggle */}
+      <div
+        className="flex items-center justify-between p-4 rounded-2xl"
+        style={{ background: "var(--surface)" }}
+      >
+        <div>
+          <p className="text-[14px] font-medium">Vault</p>
+          <p className="text-[12px] mt-0.5" style={{ color: "var(--muted)" }}>
+            Hidden from friend search &amp; agents
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => set("vault", !form.vault)}
+          aria-label={form.vault ? "Remove from vault" : "Add to vault"}
+          className="w-12 h-[28px] rounded-full relative transition-all duration-300 flex-shrink-0"
+          style={{ background: form.vault ? "var(--accent)" : "var(--border-strong)" }}
+        >
+          <div
+            className="absolute top-[3px] w-[22px] h-[22px] rounded-full bg-white transition-all duration-300"
+            style={{ left: form.vault ? "26px" : "3px", boxShadow: "var(--shadow-sm)" }}
+          />
+        </button>
+      </div>
 
-      <div className="pt-4 flex items-center gap-3">
+      {/* Actions */}
+      <div className="pt-3 flex items-center gap-3">
         <button
           type="button"
           onClick={save}
           disabled={saving}
-          className="px-4 py-1.5 rounded bg-black text-white dark:bg-white dark:text-black disabled:opacity-40"
+          className="btn-primary"
         >
-          {saving ? "saving…" : "save"}
+          {saving ? "Saving\u2026" : "Save Changes"}
         </button>
         <button
           type="button"
           onClick={destroy}
-          className="px-3 py-1.5 rounded border border-red-500/40 text-red-600"
+          className="btn-secondary"
+          style={{ borderColor: "rgba(181, 56, 59, 0.3)", color: "var(--error)" }}
         >
-          delete
+          Delete
         </button>
-        {status && <span className="text-xs text-black/60 dark:text-white/60">{status}</span>}
-        {error && <span className="text-xs text-red-600">error: {error}</span>}
+        {status && (
+          <span className="text-[12px] tracking-wide" style={{ color: "var(--muted)" }}>
+            {status}
+          </span>
+        )}
+        {error && (
+          <span className="text-[12px]" style={{ color: "var(--error)" }}>
+            {error}
+          </span>
+        )}
       </div>
     </div>
+  );
+}
+
+function FieldGroup({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="label-mono mb-2 block" style={{ color: "var(--muted)" }}>
+        {label}
+        {hint && (
+          <span style={{ opacity: 0.5, marginLeft: 6, textTransform: "none", letterSpacing: "normal" }}>
+            {hint}
+          </span>
+        )}
+      </span>
+      {children}
+    </label>
   );
 }
 
@@ -169,14 +218,13 @@ function Row({
   onChange: (v: string | null) => void;
 }) {
   return (
-    <label className="block">
-      <span className="text-xs text-black/60 dark:text-white/60">{label}</span>
+    <FieldGroup label={label}>
       <input
         type="text"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-        className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1"
+        className="input-editorial"
       />
-    </label>
+    </FieldGroup>
   );
 }

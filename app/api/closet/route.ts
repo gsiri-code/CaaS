@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, ilike } from "drizzle-orm";
 import { db } from "@/db";
 import { garments } from "@/db/schema";
-import { DEMO_USERS, isDemoUserKey } from "@/lib/demo-users";
+import { getSessionUser } from "@/lib/session";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
-  const asParam = sp.get("as");
-  const asKey = isDemoUserKey(asParam) ? asParam : "alice";
-  const userId = DEMO_USERS[asKey].id;
+  const user = await getSessionUser({ as: sp.get("as") ?? undefined });
+  const userId = user.id;
 
   const category = sp.get("category");
   const color = sp.get("color");

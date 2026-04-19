@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DemoUserKey } from "@/lib/session";
 
 type GarmentCard = {
   id: string;
   category: string;
   heroUrl: string;
   brandGuess: string | null;
+};
+
+type LogEntry = {
+  id: string;
+  text: string;
+  type: "info" | "success" | "skip" | "error";
+  ts: number;
 };
 
 type Status = {
@@ -28,82 +36,98 @@ const emptyStatus: Status = {
   error: null,
 };
 
-export default function IngestClient({ as }: { as: "alice" | "bob" }) {
+export default function IngestClient({ as }: { as: DemoUserKey }) {
   const [status, setStatus] = useState<Status>(emptyStatus);
   const [cards, setCards] = useState<GarmentCard[]>([]);
+  const [log, setLog] = useState<LogEntry[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const logEndRef = useRef<HTMLDivElement | null>(null);
 
-  function loadDemoPreview() {
-    setStatus({
-      batchId: "demo-batch",
-      photosDone: 6,
-      photosTotal: 6,
-      garmentsTotal: 4,
-      done: true,
-      error: null,
-    });
-    setCards([
-      { id: as === "alice" ? "g-alice-1" : "g-bob-1", category: "Dress", heroUrl: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80", brandGuess: "Vince" },
-      { id: as === "alice" ? "g-alice-2" : "g-bob-2", category: "Outerwear", heroUrl: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80", brandGuess: "Aritzia" },
-      { id: as === "alice" ? "g-alice-1" : "g-bob-1", category: "Shoes", heroUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80", brandGuess: "Common Projects" },
-      { id: as === "alice" ? "g-alice-2" : "g-bob-2", category: "Top", heroUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80", brandGuess: "Demo Atelier" },
-    ]);
-  }
+  const addLog = useCallback((text: string, type: LogEntry["type"] = "info") => {
+    setLog((prev) => [...prev, { id: `${Date.now()}-${Math.random()}`, text, type, ts: Date.now() }]);
+  }, []);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [log]);
+
 
   const onFiles = useCallback(
     async (files: FileList) => {
       if (files.length === 0) return;
       setStatus({ ...emptyStatus });
       setCards([]);
+      setLog([]);
 
       const form = new FormData();
       form.set("as", as);
       for (const f of Array.from(files)) form.append("files", f);
 
+      addLog(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}...`, "info");
+
       const res = await fetch("/api/ingest/upload", { method: "POST", body: form });
       if (!res.ok) {
         setStatus((s) => ({ ...s, error: `upload failed: ${res.status}` }));
+        addLog(`Upload failed (${res.status})`, "error");
         return;
       }
-      const { batch_id } = (await res.json()) as { batch_id: string };
-      setStatus((s) => ({ ...s, batchId: batch_id }));
+      const { batch_id, accepted } = (await res.json()) as { batch_id: string; accepted?: number };
+      setStatus((s) => ({
+        ...s,
+        batchId: batch_id,
+        photosDone: 0,
+        photosTotal: accepted ?? files.length,
+        garmentsTotal: 0,
+      }));
+      addLog(`${accepted ?? files.length} photos accepted — scanning for clothing`, "info");
 
       const source = new EventSource(`/api/ingest/stream?batch_id=${batch_id}`);
       source.onmessage = (ev) => {
         const event = JSON.parse(ev.data);
-        if (event.type === "garment_created") {
+        if (event.type === "photo_accepted") {
+          addLog("Photo accepted for processing", "info");
+        } else if (event.type === "photo_skipped") {
+          addLog(`Photo skipped — ${event.reason?.replace(/_/g, " ") ?? "filtered"}`, "skip");
+        } else if (event.type === "garment_created") {
+          const label = [event.category, event.brandGuess].filter(Boolean).join(" — ");
+          addLog(`Extracted ${label}`, "success");
           setCards((c) => [
             { id: event.garmentId, category: event.category, heroUrl: event.heroUrl, brandGuess: event.brandGuess },
             ...c,
           ]);
+        } else if (event.type === "garment_merged") {
+          addLog("Duplicate detected — merged with existing garment", "info");
         } else if (event.type === "batch_progress") {
           setStatus((s) => ({ ...s, photosDone: event.photosDone, photosTotal: event.photosTotal, garmentsTotal: event.garmentsTotal }));
         } else if (event.type === "batch_complete") {
           setStatus((s) => ({ ...s, done: true }));
+          addLog("Import complete", "success");
           source.close();
         } else if (event.type === "batch_error") {
           setStatus((s) => ({ ...s, done: true, error: event.error }));
+          addLog(`Error: ${event.error}`, "error");
           source.close();
         }
       };
       source.onerror = () => { source.close(); };
     },
-    [as],
+    [as, addLog],
   );
 
   const progressPct = status.photosTotal > 0 ? Math.round((status.photosDone / status.photosTotal) * 100) : 0;
+  const photoLabel = status.photosTotal > 0
+    ? `${status.photosDone} / ${status.photosTotal} photo${status.photosTotal === 1 ? "" : "s"} processed`
+    : "Preparing...";
+  const pieceCount = cards.length;
+  const itemLabel = `${pieceCount} piece${pieceCount === 1 ? "" : "s"} extracted`;
+  const showItemCount = pieceCount > 0;
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Hero */}
       <div className="px-6 pt-20 pb-4 animate-fade-up">
-        <p className="text-[11px] tracking-[0.2em] uppercase mb-4" style={{ color: "var(--accent)" }}>
-          Wardrobe Import
-        </p>
-        <h1
-          className="text-[36px] leading-[1.1] font-light tracking-[-0.02em]"
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
+        <p className="overline mb-4">Wardrobe Import</p>
+        <h1 className="section-header text-[36px]">
           Import Your<br />Closet
         </h1>
         <p className="mt-4 text-[15px] leading-relaxed" style={{ color: "var(--muted)" }}>
@@ -115,24 +139,15 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
       <div className="px-6 pt-4 pb-6 flex flex-col gap-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
         <button
           onClick={() => inputRef.current?.click()}
-          className="h-[52px] rounded-xl text-[15px] font-medium flex items-center justify-center transition-all duration-200 hover:opacity-90 active:scale-[0.98]"
-          style={{ background: "var(--fg)", color: "var(--bg)" }}
+          className="btn-primary !h-[52px] w-full flex items-center justify-center"
         >
           Open Camera Roll
         </button>
         <button
           onClick={() => inputRef.current?.click()}
-          className="h-[52px] rounded-xl text-[15px] font-medium flex items-center justify-center border transition-all duration-200 hover:bg-[var(--surface)] active:scale-[0.98]"
-          style={{ borderColor: "var(--border-strong)" }}
+          className="btn-secondary !h-[52px] w-full flex items-center justify-center"
         >
           Take New Photos
-        </button>
-        <button
-          onClick={loadDemoPreview}
-          className="h-11 rounded-xl text-[13px] flex items-center justify-center transition-all duration-200 hover:opacity-80"
-          style={{ background: "var(--surface)", color: "var(--muted)" }}
-        >
-          Load Demo Import
         </button>
         <input
           ref={inputRef}
@@ -144,9 +159,10 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
         />
       </div>
 
-      {/* Progress */}
+      {/* Progress + Activity Log */}
       {status.batchId && (
         <div className="px-6 py-4 animate-fade-up">
+          {/* Progress bar */}
           <div className="h-[3px] rounded-full overflow-hidden" style={{ background: "var(--surface)" }}>
             <div
               className="h-full rounded-full transition-all duration-500 ease-out"
@@ -154,46 +170,115 @@ export default function IngestClient({ as }: { as: "alice" | "bob" }) {
             />
           </div>
           <div className="mt-3 flex justify-between text-[12px]" style={{ color: "var(--muted)" }}>
-            <span className="tracking-wide">
-              Processing {status.photosDone} / {status.photosTotal || "?"} photos
-            </span>
-            <span className="font-medium">{status.garmentsTotal} items</span>
+            <span className="tracking-wide">{photoLabel}</span>
+            <span className="font-medium">{showItemCount ? itemLabel : ""}</span>
           </div>
-          {status.done && !status.error && (
-            <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--success)" }}>
-              Import complete
-            </p>
-          )}
-          {status.error && (
-            <p className="mt-2 text-[12px]" style={{ color: "var(--error)" }}>Error: {status.error}</p>
+
+          {/* Activity log */}
+          {log.length > 0 && (
+            <div
+              className="mt-4 rounded-xl overflow-hidden"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <div
+                className="px-4 py-2.5 flex items-center justify-between"
+                style={{ borderBottom: "1px solid var(--border)" }}
+              >
+                <span
+                  className="text-[10px] tracking-[0.15em] uppercase font-medium"
+                  style={{ color: "var(--muted)" }}
+                >
+                  Activity
+                </span>
+                {!status.done && (
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full animate-pulse"
+                      style={{ background: "var(--accent)" }}
+                    />
+                    <span
+                      className="text-[10px] tracking-wide"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      Processing
+                    </span>
+                  </span>
+                )}
+              </div>
+              <div
+                className="max-h-[180px] overflow-y-auto px-4 py-2"
+                style={{ scrollbarWidth: "thin" }}
+              >
+                {log.map((entry, i) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-start gap-2.5 py-1.5 animate-fade-up"
+                    style={{ animationDelay: `${0.03 * Math.min(i, 6)}s` }}
+                  >
+                    <span
+                      className="mt-[5px] w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{
+                        background:
+                          entry.type === "success"
+                            ? "var(--success)"
+                            : entry.type === "error"
+                              ? "var(--error)"
+                              : entry.type === "skip"
+                                ? "var(--muted)"
+                                : "var(--accent)",
+                      }}
+                    />
+                    <span
+                      className="text-[12px] leading-[18px]"
+                      style={{
+                        color:
+                          entry.type === "error"
+                            ? "var(--error)"
+                            : entry.type === "skip"
+                              ? "var(--muted)"
+                              : "var(--fg)",
+                      }}
+                    >
+                      {entry.text}
+                    </span>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
+            </div>
           )}
         </div>
       )}
 
       {/* Garment Grid */}
       {cards.length > 0 && (
-        <div className="px-6 pt-2 pb-4">
+        <div className="px-6 pt-2 pb-32">
           <div className="grid grid-cols-2 gap-4">
             {cards.map((c, i) => (
               <Link
                 key={`${c.id}-${c.category}`}
                 href={`/closet/${c.id}?as=${as}`}
-                className="no-underline animate-fade-up group"
+                className="no-underline animate-fade-up"
                 style={{ animationDelay: `${0.05 * i}s`, color: "var(--fg)" }}
               >
-                <div className="overflow-hidden rounded-xl" style={{ boxShadow: "var(--shadow-sm)" }}>
+                <div className="card-editorial">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={c.heroUrl}
                     alt={c.category}
-                    className="w-full aspect-[4/5] object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="w-full aspect-[4/5] object-cover"
                     style={{ background: "var(--surface)" }}
                   />
                 </div>
-                <div className="pt-2.5 px-0.5">
-                  <p className="text-[14px] font-medium capitalize leading-tight">{c.category}</p>
+                <div className="pt-3 px-1">
+                  <p
+                    className="text-[15px] font-medium capitalize leading-tight"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    {c.category}
+                  </p>
                   {c.brandGuess && (
-                    <p className="text-[11px] mt-0.5 tracking-wide" style={{ color: "var(--muted)" }}>{c.brandGuess}</p>
+                    <p className="text-[11px] mt-1 tracking-wide" style={{ color: "var(--muted)" }}>{c.brandGuess}</p>
                   )}
                 </div>
               </Link>

@@ -20,6 +20,9 @@ export type WorkerPhoto = {
 };
 
 export async function processBatch(batchId: string, userId: string, items: WorkerPhoto[]) {
+  // `userId` is resolved once at upload time from the active session profile.
+  // Every photo accepted into this batch and every garment extracted from it
+  // must retain that same owner regardless of subsequent navigation.
   try {
     const accepted: WorkerPhoto[] = [];
 

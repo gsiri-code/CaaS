@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import type { DemoUserKey } from "@/lib/session";
 
 type Match = {
   garment: {
@@ -20,7 +22,8 @@ type Match = {
 
 const CATEGORIES = ["", "top", "bottom", "dress", "outerwear", "shoe", "accessory"] as const;
 
-export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
+export default function WishlistClient({ asKey }: { asKey: DemoUserKey }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -29,6 +32,7 @@ export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [requestingId, setRequestingId] = useState<string | null>(null);
 
   const run = useCallback(() => {
     if (!query.trim() && !refFile) {
@@ -45,16 +49,18 @@ export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
           refBase64 = btoa(String.fromCharCode(...arr));
         }
 
+        const sessionBody = {
+          as: asKey,
+          query_text: query.trim() || undefined,
+          reference_image_base64: refBase64,
+          category: category || undefined,
+          limit: 15,
+        };
+
         const searchRes = await fetch("/api/search/friend-closets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            as: asKey,
-            query_text: query.trim() || undefined,
-            reference_image_base64: refBase64,
-            category: category || undefined,
-            limit: 15,
-          }),
+          body: JSON.stringify(sessionBody),
         });
         if (!searchRes.ok) {
           throw new Error(`search ${searchRes.status}: ${await searchRes.text()}`);
@@ -81,30 +87,38 @@ export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
   }, [asKey, query, category, maxPrice, refFile, saveToWishlist]);
 
   return (
-    <div className="mt-6 space-y-6">
-      <div className="space-y-3 text-sm">
-        <label className="block">
-          <span className="text-xs text-black/60 dark:text-white/60">
-            describe what you want
-          </span>
+    <div className="px-6 pt-6 space-y-8">
+      {/* Search form */}
+      <div
+        className="rounded-2xl p-6 space-y-5 animate-fade-up"
+        style={{ background: "var(--surface)", boxShadow: "var(--shadow-editorial)", animationDelay: "0.08s" }}
+      >
+        <div>
+          <label className="label-mono block mb-2" style={{ color: "var(--muted)" }}>
+            Describe what you want
+          </label>
           <input
             type="text"
             placeholder="red floral midi dress"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-3 py-2"
+            className="input-editorial"
+            style={{ background: "var(--bg)" }}
           />
-        </label>
+        </div>
 
-        <div className="flex flex-wrap gap-3">
-          <label className="block flex-1 min-w-[140px]">
-            <span className="text-xs text-black/60 dark:text-white/60">category (optional)</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="label-mono block mb-2" style={{ color: "var(--muted)" }}>
+              Category
+            </label>
             <select
               value={category}
               onChange={(e) =>
                 setCategory(e.target.value as (typeof CATEGORIES)[number])
               }
-              className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1.5"
+              className="input-editorial capitalize"
+              style={{ background: "var(--bg)" }}
             >
               {CATEGORIES.map((c) => (
                 <option key={c || "any"} value={c}>
@@ -112,98 +126,154 @@ export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
 
-          <label className="block flex-1 min-w-[140px]">
-            <span className="text-xs text-black/60 dark:text-white/60">max price / day ($)</span>
+          <div>
+            <label className="label-mono block mb-2" style={{ color: "var(--muted)" }}>
+              Max price / day
+            </label>
             <input
               type="number"
+              placeholder="$"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
-              className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1.5"
+              className="input-editorial"
+              style={{ background: "var(--bg)" }}
             />
-          </label>
+          </div>
 
-          <label className="block flex-1 min-w-[140px]">
-            <span className="text-xs text-black/60 dark:text-white/60">reference image (optional)</span>
+          <div>
+            <label className="label-mono block mb-2" style={{ color: "var(--muted)" }}>
+              Reference image
+            </label>
+            <div
+              className="input-editorial flex items-center cursor-pointer"
+              style={{ background: "var(--bg)", padding: "8px 14px" }}
+              onClick={() => document.getElementById("ref-file-input")?.click()}
+            >
+              <span className="text-[13px] truncate" style={{ color: refFile ? "var(--fg)" : "var(--muted)", opacity: refFile ? 1 : 0.6 }}>
+                {refFile ? refFile.name : "Choose file\u2026"}
+              </span>
+            </div>
             <input
+              id="ref-file-input"
               type="file"
               accept="image/*"
               onChange={(e) => setRefFile(e.target.files?.[0] ?? null)}
-              className="mt-1 block w-full text-xs"
+              className="hidden"
             />
-          </label>
+          </div>
         </div>
 
-        <label className="inline-flex items-center gap-2 text-xs text-black/60 dark:text-white/60">
-          <input
-            type="checkbox"
-            checked={saveToWishlist}
-            onChange={(e) => setSaveToWishlist(e.target.checked)}
-          />
-          save this query to my wishlist
-        </label>
+        <div className="flex items-center justify-between pt-1">
+          <label
+            className="flex items-center gap-2.5 text-[12px] tracking-wide cursor-pointer"
+            style={{ color: "var(--muted)" }}
+          >
+            <input
+              type="checkbox"
+              checked={saveToWishlist}
+              onChange={(e) => setSaveToWishlist(e.target.checked)}
+              className="w-4 h-4 rounded accent-black"
+            />
+            Save to wishlist
+          </label>
 
-        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={run}
             disabled={pending}
-            className="px-4 py-1.5 rounded bg-black text-white dark:bg-white dark:text-black disabled:opacity-40"
+            className="btn-primary"
           >
-            {pending ? "searching…" : "search friends"}
+            {pending ? "Searching\u2026" : "Search Friends"}
           </button>
-          {error && <span className="text-xs text-red-600">error: {error}</span>}
         </div>
+
+        {error && (
+          <p className="text-[12px]" style={{ color: "var(--error)" }}>
+            {error}
+          </p>
+        )}
       </div>
 
+      {/* Results */}
       {matches && (
-        <div>
-          <p className="text-xs uppercase tracking-wider text-black/50 dark:text-white/50 mb-3">
+        <div className="animate-fade-up">
+          <p className="label-mono mb-5" style={{ color: "var(--muted)" }}>
             {matches.length} match{matches.length === 1 ? "" : "es"}
           </p>
           {matches.length === 0 ? (
-            <p className="text-sm text-black/60 dark:text-white/60">
-              Nothing found. Try broadening the query or adding a reference image.
-            </p>
+            <div className="text-center py-16">
+              <p className="section-header text-[24px]" style={{ color: "var(--muted)" }}>
+                Nothing found
+              </p>
+              <p className="text-[13px] mt-3" style={{ color: "var(--muted)" }}>
+                Try broadening the query or adding a reference image.
+              </p>
+            </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {matches.map((m) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5">
+              {matches.map((m, i) => (
                 <div
                   key={m.garment.id}
-                  className="rounded border border-black/10 dark:border-white/10 overflow-hidden"
+                  className="card-editorial animate-fade-up"
+                  style={{ animationDelay: `${0.04 * Math.min(i, 12)}s` }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={m.garment.heroImageUrl}
                     alt={m.garment.subcategory ?? m.garment.category}
-                    className="w-full aspect-square object-cover"
+                    className="w-full aspect-[4/5] object-cover"
+                    style={{ background: "var(--surface)" }}
                   />
-                  <div className="px-2 py-1.5 text-xs space-y-0.5">
-                    <div className="flex items-center justify-between">
-                      <span className="capitalize font-medium">
+                  <div className="p-3.5 space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span
+                        className="text-[15px] font-medium capitalize"
+                        style={{ fontFamily: "var(--font-serif)" }}
+                      >
                         {m.garment.subcategory ?? m.garment.category}
                       </span>
-                      <span className="text-black/50 dark:text-white/50">
-                        {(1 - m.score).toFixed(2)}
+                      <span
+                        className="label-mono"
+                        style={{ color: "var(--muted)", fontSize: "9px" }}
+                      >
+                        {Math.round((1 - m.score) * 100)}%
                       </span>
                     </div>
-                    <div className="text-black/50 dark:text-white/50 capitalize">
-                      {[m.garment.colorPrimary, m.garment.brandGuess].filter(Boolean).join(" · ")}
-                    </div>
-                    <div className="text-black/50 dark:text-white/50">
-                      owned by {m.owner.name}
-                    </div>
+                    <p className="text-[11px] capitalize tracking-wide" style={{ color: "var(--muted)" }}>
+                      {[m.garment.colorPrimary, m.garment.brandGuess].filter(Boolean).join(" \u00b7 ")}
+                    </p>
+                    <p className="text-[11px] tracking-wide" style={{ color: "var(--muted)" }}>
+                      {m.owner.name}&rsquo;s closet
+                    </p>
                     <button
                       type="button"
-                      className="mt-1 w-full px-2 py-1 rounded border border-black/15 dark:border-white/15 text-xs hover:bg-black/5 dark:hover:bg-white/5"
-                      onClick={() =>
-                        alert(
-                          `Phase 6 will spawn a negotiation agent for this item (${m.garment.id}). Not wired yet.`,
-                        )
-                      }
+                      className="btn-secondary w-full !h-9 !text-[11px] !tracking-wide mt-1"
+                      disabled={requestingId === m.garment.id}
+                      onClick={async () => {
+                        setRequestingId(m.garment.id);
+                        try {
+                          const res = await fetch(`/api/negotiations?as=${asKey}`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              garmentId: m.garment.id,
+                              ownerId: m.owner.id,
+                            }),
+                          });
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            throw new Error(data.error ?? `Failed (${res.status})`);
+                          }
+                          router.push(`/negotiations?as=${asKey}`);
+                        } catch (e) {
+                          setError(e instanceof Error ? e.message : String(e));
+                          setRequestingId(null);
+                        }
+                      }}
                     >
-                      request rental
+                      {requestingId === m.garment.id ? "Creating\u2026" : "Request Rental"}
                     </button>
                   </div>
                 </div>

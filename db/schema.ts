@@ -43,6 +43,8 @@ export const friendships = pgTable(
 
 export const photos = pgTable("photos", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Upload ownership is decided at ingest request time and must remain attached
+  // to the source photo so generated garments stay in the correct closet.
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -54,6 +56,7 @@ export const photos = pgTable("photos", {
 
 export const garments = pgTable("garments", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Derived garments inherit ownership from the upload batch's resolved user.
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),

@@ -144,40 +144,7 @@ const seedGarments: MockGarment[] = [
   },
 ];
 
-const seedNegotiations: MockNegotiation[] = [
-  {
-    id: "n-1",
-    requesterId: DEMO_USERS.alice.id,
-    ownerId: DEMO_USERS.bob.id,
-    garmentId: "g-bob-1",
-    status: "open",
-    agreedPriceUsd: 24,
-    agreedHandoff: {
-      type: "calendar_event",
-      datetime: new Date(now + 2 * day).toISOString(),
-      location: "SoHo coffee shop",
-    },
-    turnCount: 5,
-    createdAt: new Date(now - 2 * day).toISOString(),
-    closedAt: null,
-    messages: [
-      {
-        id: "m-1",
-        speaker: "alice",
-        content: "Would Bob consider lending this for Saturday night?",
-        toolCall: null,
-        createdAt: new Date(now - 2 * day).toISOString(),
-      },
-      {
-        id: "m-2",
-        speaker: "bob",
-        content: "Yes — $24/day works if pickup is easy.",
-        toolCall: { name: "calendar.check_availability", result: "available" },
-        createdAt: new Date(now - 2 * day + 15 * 60 * 1000).toISOString(),
-      },
-    ],
-  },
-];
+const seedNegotiations: MockNegotiation[] = [];
 
 const globalForMock = globalThis as typeof globalThis & { __caasMockState?: MockState };
 
@@ -214,10 +181,10 @@ export function listMockGarments(user: DemoUser) {
       description: g.description,
       heroImageUrl: g.heroImageUrl,
       wearCount: g.wearCount,
-      lastWornAt: g.lastWornAt,
+      lastWornAt: g.lastWornAt ? new Date(g.lastWornAt) : null,
       estimatedValueUsd: g.estimatedValueUsd,
       vault: g.vault,
-      createdAt: g.createdAt,
+      createdAt: new Date(g.createdAt),
     }));
 }
 
@@ -226,6 +193,9 @@ export function getMockGarment(id: string, user: DemoUser) {
   if (!garment) return null;
   return {
     ...garment,
+    brandConfidence: 0,
+    lastWornAt: garment.lastWornAt ? new Date(garment.lastWornAt) : null,
+    createdAt: new Date(garment.createdAt),
     imageEmbedding: undefined,
     textEmbedding: undefined,
     photos: garment.photos.map((p) => ({ ...p })),
@@ -339,6 +309,23 @@ export function getMockNegotiation(id: string) {
     garment: getGarmentSummary(negotiation.garmentId),
     messages: negotiation.messages.map((m) => ({ ...m, toolCall: m.toolCall ? { ...m.toolCall } : null })),
   };
+}
+
+export function addMockNegotiationMessage(
+  negotiationId: string,
+  msg: { speaker: string; content: string; toolCall: { name: string; result?: string } | null },
+) {
+  const negotiation = getState().negotiations.find((n) => n.id === negotiationId);
+  if (!negotiation) return null;
+  const id = randomUUID();
+  negotiation.messages.push({
+    id,
+    speaker: msg.speaker,
+    content: msg.content,
+    toolCall: msg.toolCall,
+    createdAt: new Date().toISOString(),
+  });
+  return { id };
 }
 
 export function updateMockNegotiation(

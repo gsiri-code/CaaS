@@ -2,6 +2,7 @@ import { db, isDatabaseConfigured } from "@/db";
 import { and, eq, ne, or, sql } from "drizzle-orm";
 import { schema } from "@/db";
 import {
+  addMockNegotiationMessage,
   createMockIngestBatch,
   createMockNegotiation,
   getMockGarment,
@@ -12,12 +13,12 @@ import {
   updateMockGarment,
   updateMockNegotiation,
 } from "@/lib/mock-data";
-import { type DemoUser, type DemoUserKey, shouldUseMockData } from "@/lib/session";
+import { type DemoUser, type DemoUserKey } from "@/lib/session";
 import { createBus } from "@/lib/ingest/events";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function withFallback<T>(operation: () => Promise<T>, fallback: () => any): Promise<T> {
-  if (shouldUseMockData() || !isDatabaseConfigured()) return fallback();
+  if (!isDatabaseConfigured()) return fallback();
   try {
     return await operation();
   } catch {
@@ -243,6 +244,142 @@ export async function patchNegotiation(
     },
     () => updateMockNegotiation(id, updates),
   );
+}
+
+export async function spawnNegotiation(
+  user: DemoUser,
+  garmentId: string,
+  ownerId: string,
+) {
+  const { runNegotiationLoop } = await import("@/lib/agents/loop");
+  const { getDemoUserById } = await import("@/lib/demo-users");
+
+  // Create the negotiation row
+  const negotiation = await createNegotiation(user, garmentId, ownerId);
+  const negotiationId = negotiation.id;
+
+  // Resolve garment details
+  const garment = await withFallback(
+    async () => {
+      const [g] = await db
+        .select({
+          id: schema.garments.id,
+          category: schema.garments.category,
+          subcategory: schema.garments.subcategory,
+          brandGuess: schema.garments.brandGuess,
+          description: schema.garments.description,
+          heroImageUrl: schema.garments.heroImageUrl,
+          estimatedValueUsd: schema.garments.estimatedValueUsd,
+          wearCount: schema.garments.wearCount,
+          vault: schema.garments.vault,
+        })
+        .from(schema.garments)
+        .where(eq(schema.garments.id, garmentId))
+        .limit(1);
+      return g ?? null;
+    },
+    () => {
+      const { getDemoUserById: getById } = require("@/lib/demo-users") as typeof import("@/lib/demo-users");
+      const { getMockGarment: getMG } = require("@/lib/mock-data") as typeof import("@/lib/mock-data");
+      const ownerDemoUser = getById(ownerId);
+      if (!ownerDemoUser) return null;
+      return getMG(garmentId, ownerDemoUser);
+    },
+  );
+
+  if (!garment) {
+    return { negotiation, error: "garment not found" };
+  }
+
+  const ownerUser = getDemoUserById(ownerId);
+  const requesterName = user.name;
+  const ownerName = ownerUser?.name ?? "Owner";
+
+  // Build persistence callbacks
+  const persistMessage = async (msg: {
+    negotiationId: string;
+    speaker: string;
+    content: string;
+    toolCall: { name: string; result?: string } | null;
+  }) => {
+    return withFallback(
+      async () => {
+        const [row] = await db
+          .insert(schema.negotiationMessages)
+          .values({
+            negotiationId: msg.negotiationId,
+            speaker: msg.speaker,
+            content: msg.content,
+            toolCall: msg.toolCall,
+          })
+          .returning({ id: schema.negotiationMessages.id });
+        return row;
+      },
+      () => {
+        const result = addMockNegotiationMessage(msg.negotiationId, msg);
+        return result ?? { id: "mock-" + Date.now() };
+      },
+    );
+  };
+
+  const persistStatus = async (update: {
+    negotiationId: string;
+    status: string;
+    turnCount: number;
+    agreedPriceUsd?: number;
+    agreedHandoff?: { type: "calendar_event" | "shipping"; datetime?: string; location?: string };
+  }) => {
+    await withFallback(
+      async () => {
+        const sets: Record<string, unknown> = {
+          status: update.status,
+          turnCount: update.turnCount,
+        };
+        if (update.agreedPriceUsd !== undefined)
+          sets.agreedPriceUsd = update.agreedPriceUsd;
+        if (update.agreedHandoff !== undefined)
+          sets.agreedHandoff = update.agreedHandoff;
+        if (["accepted", "rejected", "expired"].includes(update.status))
+          sets.closedAt = new Date();
+        await db
+          .update(schema.rentalNegotiations)
+          .set(sets)
+          .where(eq(schema.rentalNegotiations.id, update.negotiationId));
+      },
+      () => {
+        updateMockNegotiation(update.negotiationId, {
+          status: update.status,
+          agreedPriceUsd: update.agreedPriceUsd,
+          agreedHandoff: update.agreedHandoff,
+        });
+      },
+    );
+  };
+
+  // Kick off the loop in the background — don't await it
+  runNegotiationLoop({
+    negotiationId,
+    garment: {
+      id: garment.id,
+      category: garment.category,
+      subcategory: "subcategory" in garment ? (garment as { subcategory?: string | null }).subcategory : null,
+      brandGuess: garment.brandGuess,
+      description: garment.description,
+      heroImageUrl: garment.heroImageUrl,
+      estimatedValueUsd: garment.estimatedValueUsd,
+      wearCount: "wearCount" in garment ? (garment as { wearCount?: number }).wearCount : 0,
+      vault: "vault" in garment ? (garment as { vault?: boolean }).vault : false,
+    },
+    requester: { userId: user.id, userName: requesterName, role: "requester" },
+    owner: { userId: ownerId, userName: ownerName, role: "owner" },
+    sharedEvents: [],
+    persistMessage,
+    persistStatus,
+  }).catch((err) => {
+    console.error(`[spawnNegotiation] loop failed for ${negotiationId}:`, err);
+  });
+
+  return { negotiation };
 }
 
 export async function createIngestBatch(asKey: DemoUserKey) {

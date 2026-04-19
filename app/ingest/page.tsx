@@ -8,5 +8,5 @@ export default async function IngestPage({
 }) {
   const sp = await searchParams;
   const user = await getSessionUser(sp);
-  return <IngestClient as={user.name.toLowerCase() as "alice" | "bob"} />;
+  return <IngestClient as={user.key} />;
 }

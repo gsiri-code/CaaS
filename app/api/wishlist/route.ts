@@ -4,15 +4,15 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db } from "@/db";
 import { wishlistItems } from "@/db/schema";
-import { DEMO_USERS, isDemoUserKey } from "@/lib/demo-users";
 import { embedText } from "@/lib/clients/gemini";
+import { getSessionUser } from "@/lib/session";
 import { embedImage } from "@/lib/clients/fashionclip";
 import { ensureBatchDirs, cropPath, cropPublicUrl, writeBytes } from "@/lib/ingest/storage";
 
 export const runtime = "nodejs";
 
 const postSchema = z.object({
-  as: z.enum(["alice", "bob"]).optional(),
+  as: z.string().optional(),
   query_text: z.string().min(1),
   reference_image_base64: z.string().min(10).optional(),
   reference_image_mime: z.string().optional(),
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues }, { status: 400 });
   }
   const { query_text, reference_image_base64, max_rental_price_usd } = parsed.data;
-  const asKey = parsed.data.as && isDemoUserKey(parsed.data.as) ? parsed.data.as : "alice";
-  const userId = DEMO_USERS[asKey].id;
+  const user = await getSessionUser({ as: parsed.data.as });
+  const userId = user.id;
 
   let referenceImageUrl: string | null = null;
   let referenceImageEmbedding: number[] | null = null;
@@ -60,9 +60,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const asParam = req.nextUrl.searchParams.get("as");
-  const asKey = isDemoUserKey(asParam) ? asParam : "alice";
-  const userId = DEMO_USERS[asKey].id;
+  const user = await getSessionUser({ as: req.nextUrl.searchParams.get("as") ?? undefined });
+  const userId = user.id;
 
   const rows = await db
     .select({

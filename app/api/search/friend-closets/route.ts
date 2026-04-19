@@ -3,15 +3,15 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { garments } from "@/db/schema";
-import { DEMO_USERS, isDemoUserKey } from "@/lib/demo-users";
 import { embedText } from "@/lib/clients/gemini";
+import { getSessionUser } from "@/lib/session";
 import { embedImage } from "@/lib/clients/fashionclip";
 import { getFriendIds, getUsersById } from "@/lib/friends";
 
 export const runtime = "nodejs";
 
 const bodySchema = z.object({
-  as: z.enum(["alice", "bob"]).optional(),
+  as: z.string().optional(),
   query_text: z.string().min(1).optional(),
   reference_image_base64: z.string().min(10).optional(),
   category: z.string().optional(),
@@ -48,10 +48,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const asKey = parsed.data.as && isDemoUserKey(parsed.data.as) ? parsed.data.as : "alice";
-  const userId = DEMO_USERS[asKey].id;
+  const user = await getSessionUser({ as: parsed.data.as });
 
-  const friendIds = await getFriendIds(userId);
+  const friendIds = await getFriendIds(user.id);
   if (friendIds.length === 0) {
     return NextResponse.json({ matches: [] satisfies Match[] });
   }

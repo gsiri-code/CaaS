@@ -12,7 +12,7 @@ export default async function NegotiationsPage({
     <NegotiationsClient
       userId={user.id}
       userName={user.name}
-      as={user.name.toLowerCase() as "alice" | "bob"}
+      as={user.key}
     />
   );
 }

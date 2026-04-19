@@ -19,6 +19,7 @@ export default function ClosetGrid({ items, asKey }: { items: Item[]; asKey: str
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = useCallback((id: string) => {
@@ -60,86 +61,187 @@ export default function ClosetGrid({ items, asKey }: { items: Item[]; asKey: str
   const detailHref = (id: string) =>
     asKey ? `/closet/${id}?as=${asKey}` : `/closet/${id}`;
 
+  const deleteGarment = useCallback(async (id: string) => {
+    if (!confirm("Delete this garment? This cannot be undone.")) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      const href = asKey ? `/api/closet/${id}?as=${asKey}` : `/api/closet/${id}`;
+      const res = await fetch(href, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data.error === "string" ? data.error : `HTTP ${res.status}`);
+      }
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingId(null);
+    }
+  }, [asKey, router]);
+
   return (
-    <div className="mt-4">
+    <div>
+      {/* Merge toolbar */}
       {selected.size > 0 && (
-        <div className="sticky top-0 z-10 bg-white dark:bg-black border border-black/10 dark:border-white/10 rounded px-3 py-2 mb-3 flex items-center gap-3 text-sm">
-          <span>{selected.size} selected</span>
+        <div
+          className="sticky top-3 z-10 glass rounded-2xl px-5 py-3 mb-5 flex items-center gap-3 animate-fade-up"
+          style={{ boxShadow: "var(--shadow-md)" }}
+        >
+          <span className="text-[13px] font-medium tracking-wide">
+            {selected.size} selected
+          </span>
+          <div className="flex-1" />
           <button
             type="button"
             disabled={selected.size !== 2 || busy}
             onClick={merge}
-            className="px-3 py-1 rounded bg-black text-white dark:bg-white dark:text-black disabled:opacity-40 disabled:cursor-not-allowed"
+            className="btn-primary !h-9 !px-5 !text-[12px] !tracking-wide"
           >
-            {busy ? "merging…" : "merge 2 duplicates"}
+            {busy ? "Merging\u2026" : "Merge Duplicates"}
           </button>
           <button
             type="button"
             onClick={() => setSelected(new Set())}
-            className="px-3 py-1 rounded border border-black/15 dark:border-white/15"
+            className="btn-secondary !h-9 !px-4 !text-[12px]"
           >
-            clear
+            Clear
           </button>
-          {error && <span className="text-red-600">error: {error}</span>}
+          {error && (
+            <span className="text-[12px]" style={{ color: "var(--error)" }}>
+              {error}
+            </span>
+          )}
         </div>
       )}
 
       {items.length === 0 ? (
-        <p className="mt-8 text-sm text-black/60 dark:text-white/60">
-          No garments yet. Drop photos on the <Link href="/ingest" className="underline">Ingest</Link> page.
-        </p>
+        <div className="text-center py-20 animate-fade-up">
+          <p
+            className="section-header text-[26px]"
+            style={{ color: "var(--muted)" }}
+          >
+            Your closet awaits
+          </p>
+          <p className="text-[13px] mt-3" style={{ color: "var(--muted)" }}>
+            Import your first pieces on the{" "}
+            <Link
+              href={asKey ? `/ingest?as=${asKey}` : "/ingest"}
+              className="underline"
+              style={{ color: "var(--accent)" }}
+            >
+              Import
+            </Link>{" "}
+            page.
+          </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {items.map((g) => {
+        <div className="grid grid-cols-2 gap-4 sm:gap-5">
+          {items.map((g, i) => {
             const isSel = selected.has(g.id);
             return (
               <div
                 key={g.id}
-                className={`relative rounded border overflow-hidden transition ${
-                  isSel
-                    ? "border-emerald-500 ring-2 ring-emerald-500"
-                    : "border-black/10 dark:border-white/10"
-                }`}
+                className="animate-fade-up"
+                style={{ animationDelay: `${0.04 * Math.min(i, 12)}s` }}
               >
-                <Link href={detailHref(g.id)} className="block">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={g.heroImageUrl}
-                    alt={g.subcategory ?? g.category}
-                    className="w-full aspect-square object-cover"
-                  />
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => toggle(g.id)}
-                  className={`absolute top-2 left-2 h-5 w-5 rounded border text-[10px] flex items-center justify-center ${
-                    isSel
-                      ? "bg-emerald-500 text-white border-emerald-500"
-                      : "bg-white/80 dark:bg-black/60 border-black/20 dark:border-white/30"
+                <div
+                  className={`card-editorial relative ${
+                    isSel ? "ring-2 ring-offset-2" : ""
                   }`}
-                  aria-label={isSel ? "deselect" : "select for merge"}
+                  style={isSel ? { ringColor: "var(--accent)" } as React.CSSProperties : undefined}
                 >
-                  {isSel ? "✓" : ""}
-                </button>
-                {g.vault && (
-                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] bg-amber-500 text-white">
-                    vault
-                  </span>
-                )}
-                <div className="px-2 py-1.5 text-xs space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="capitalize font-medium">
-                      {g.subcategory ?? g.category}
-                    </span>
-                    {g.brandGuess && (
-                      <span className="text-black/50 dark:text-white/50 truncate ml-2">
-                        {g.brandGuess}
+                  <Link href={detailHref(g.id)} className="block no-underline">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={g.heroImageUrl}
+                      alt={g.subcategory ?? g.category}
+                      className="w-full aspect-[4/5] object-cover"
+                      style={{ background: "var(--surface)" }}
+                    />
+                  </Link>
+
+                  {/* Select checkbox */}
+                  <button
+                    type="button"
+                    onClick={() => toggle(g.id)}
+                    className="absolute top-3 left-3 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200"
+                    style={{
+                      background: isSel ? "var(--accent)" : "rgba(255,255,255,0.85)",
+                      color: isSel ? "var(--bg)" : "var(--muted)",
+                      backdropFilter: "blur(8px)",
+                      border: isSel ? "none" : "1px solid var(--border)",
+                      fontSize: "10px",
+                    }}
+                    aria-label={isSel ? "deselect" : "select for merge"}
+                  >
+                    {isSel ? "\u2713" : ""}
+                  </button>
+
+                  {/* Top-right badges */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                    {g.vault && (
+                      <span
+                        className="label-mono px-2 py-1 rounded-full"
+                        style={{
+                          background: "rgba(255,255,255,0.85)",
+                          backdropFilter: "blur(8px)",
+                          color: "var(--accent-deep)",
+                          fontSize: "9px",
+                        }}
+                      >
+                        Vault
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void deleteGarment(g.id)}
+                      disabled={deletingId === g.id}
+                      className="px-2 py-1 rounded-full text-[9px] tracking-wide uppercase transition-all duration-200 hover:opacity-80 disabled:opacity-50"
+                      style={{
+                        background: "rgba(255,255,255,0.85)",
+                        backdropFilter: "blur(8px)",
+                        color: "var(--error)",
+                        border: "1px solid rgba(181, 56, 59, 0.15)",
+                      }}
+                      aria-label="delete garment"
+                    >
+                      {deletingId === g.id ? "\u2026" : "Delete"}
+                    </button>
                   </div>
-                  <div className="text-black/50 dark:text-white/50 capitalize">
-                    {[g.colorPrimary, g.pattern].filter(Boolean).join(" · ")}
+                </div>
+
+                {/* Card text */}
+                <div className="pt-3 px-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p
+                      className="text-[15px] font-medium capitalize leading-tight"
+                      style={{ fontFamily: "var(--font-serif)" }}
+                    >
+                      {g.subcategory ?? g.category}
+                    </p>
+                    {g.brandGuess && (
+                      <p
+                        className="text-[11px] tracking-wide truncate"
+                        style={{ color: "var(--muted)" }}
+                      >
+                        {g.brandGuess}
+                      </p>
+                    )}
                   </div>
+                  {(g.colorPrimary || g.pattern) && (
+                    <p
+                      className="text-[11px] mt-1 capitalize tracking-wide"
+                      style={{ color: "var(--muted)" }}
+                    >
+                      {[g.colorPrimary, g.pattern].filter(Boolean).join(" \u00b7 ")}
+                    </p>
+                  )}
                 </div>
               </div>
             );
