@@ -1,22 +1,81 @@
-import { db, schema } from "@/db";
-import { eq } from "drizzle-orm";
-import { getSessionUser } from "@/lib/session";
+import { NextRequest, NextResponse } from "next/server";
+import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { db } from "@/db";
+import { wishlistItems } from "@/db/schema";
+import { DEMO_USERS, isDemoUserKey } from "@/lib/demo-users";
+import { embedText } from "@/lib/clients/gemini";
+import { embedImage } from "@/lib/clients/fashionclip";
+import { ensureBatchDirs, cropPath, cropPublicUrl, writeBytes } from "@/lib/ingest/storage";
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const user = await getSessionUser({ as: url.searchParams.get("as") ?? undefined });
+export const runtime = "nodejs";
 
-  const items = await db
-    .select({
-      id: schema.wishlistItems.id,
-      queryText: schema.wishlistItems.queryText,
-      referenceImageUrl: schema.wishlistItems.referenceImageUrl,
-      maxRentalPriceUsd: schema.wishlistItems.maxRentalPriceUsd,
-      createdAt: schema.wishlistItems.createdAt,
+const postSchema = z.object({
+  as: z.enum(["alice", "bob"]).optional(),
+  query_text: z.string().min(1),
+  reference_image_base64: z.string().min(10).optional(),
+  reference_image_mime: z.string().optional(),
+  max_rental_price_usd: z.number().int().positive().optional(),
+});
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
+  const parsed = postSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues }, { status: 400 });
+  }
+  const { query_text, reference_image_base64, max_rental_price_usd } = parsed.data;
+  const asKey = parsed.data.as && isDemoUserKey(parsed.data.as) ? parsed.data.as : "alice";
+  const userId = DEMO_USERS[asKey].id;
+
+  let referenceImageUrl: string | null = null;
+  let referenceImageEmbedding: number[] | null = null;
+  if (reference_image_base64) {
+    const bytes = Buffer.from(reference_image_base64, "base64");
+    // Stash the reference image alongside other uploads so the page can render it.
+    const pseudoBatch = `wishlist-${userId.slice(0, 8)}`;
+    const cropId = randomUUID();
+    await ensureBatchDirs(pseudoBatch);
+    await writeBytes(cropPath(pseudoBatch, cropId), bytes);
+    referenceImageUrl = cropPublicUrl(pseudoBatch, cropId);
+    referenceImageEmbedding = await embedImage(bytes);
+  }
+
+  const queryEmbedding = await embedText(query_text);
+
+  const [row] = await db
+    .insert(wishlistItems)
+    .values({
+      userId,
+      queryText: query_text,
+      queryEmbedding,
+      referenceImageUrl,
+      referenceImageEmbedding,
+      maxRentalPriceUsd: max_rental_price_usd ?? null,
     })
-    .from(schema.wishlistItems)
-    .where(eq(schema.wishlistItems.userId, user.id))
-    .orderBy(schema.wishlistItems.createdAt);
+    .returning({ id: wishlistItems.id });
 
-  return Response.json(items);
+  return NextResponse.json({ id: row.id });
+}
+
+export async function GET(req: NextRequest) {
+  const asParam = req.nextUrl.searchParams.get("as");
+  const asKey = isDemoUserKey(asParam) ? asParam : "alice";
+  const userId = DEMO_USERS[asKey].id;
+
+  const rows = await db
+    .select({
+      id: wishlistItems.id,
+      queryText: wishlistItems.queryText,
+      referenceImageUrl: wishlistItems.referenceImageUrl,
+      maxRentalPriceUsd: wishlistItems.maxRentalPriceUsd,
+      createdAt: wishlistItems.createdAt,
+    })
+    .from(wishlistItems)
+    .where(eq(wishlistItems.userId, userId))
+    .orderBy(desc(wishlistItems.createdAt))
+    .limit(20);
+
+  return NextResponse.json({ items: rows });
 }

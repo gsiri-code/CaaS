@@ -23,10 +23,11 @@ export async function containsClothing(imageBytes: Buffer, mimeType: string): Pr
           ],
         },
       ],
-      generationConfig: { temperature: 0, maxOutputTokens: 4 },
+      generationConfig: { temperature: 0, maxOutputTokens: 8192 },
     });
     const text = result.response.text().trim().toLowerCase();
-    return text.startsWith("y");
+    if (!text) return true;
+    return !text.startsWith("n");
   } catch {
     return true;
   }

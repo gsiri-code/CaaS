@@ -1,195 +1,215 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import type {
-  WishlistMatchMock as Match,
-  WishlistSearchResponse,
-} from "@/lib/mock-fixtures";
+import { useCallback, useState, useTransition } from "react";
 
-const SAMPLE_QUERIES = [
-  "black satin midi dress for an evening event",
-  "camel wool coat for a cold dinner",
-  "white sneakers for a weekend trip",
-];
+type Match = {
+  garment: {
+    id: string;
+    category: string;
+    subcategory: string | null;
+    colorPrimary: string | null;
+    brandGuess: string | null;
+    description: string;
+    heroImageUrl: string;
+  };
+  owner: { id: string; name: string; email: string };
+  textDistance: number | null;
+  imageDistance: number | null;
+  score: number;
+};
 
-export default function WishlistClient({ as }: { as: "alice" | "bob" }) {
-  const router = useRouter();
+const CATEGORIES = ["", "top", "bottom", "dress", "outerwear", "shoe", "accessory"] as const;
+
+export default function WishlistClient({ asKey }: { asKey: "alice" | "bob" }) {
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [refFile, setRefFile] = useState<File | null>(null);
+  const [saveToWishlist, setSaveToWishlist] = useState(false);
+  const [matches, setMatches] = useState<Match[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  async function handleSearch() {
-    if (!query.trim()) return;
-    setSearching(true);
-    setSearched(false);
-    try {
-      const res = await fetch(`/api/wishlist/search?as=${as}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ queryText: query, maxPricePerDay: maxPrice ? parseInt(maxPrice) : undefined }),
-      });
-      const data: WishlistSearchResponse = await res.json();
-      setMatches(data.matches || []);
-      setSearched(true);
-    } catch {
-      setMatches([]);
-      setSearched(true);
-    } finally {
-      setSearching(false);
+  const run = useCallback(() => {
+    if (!query.trim() && !refFile) {
+      setError("enter text or choose a reference image");
+      return;
     }
-  }
+    setError(null);
+    setMatches(null);
+    startTransition(async () => {
+      try {
+        let refBase64: string | undefined;
+        if (refFile) {
+          const arr = new Uint8Array(await refFile.arrayBuffer());
+          refBase64 = btoa(String.fromCharCode(...arr));
+        }
 
-  async function handleRent(match: Match) {
-    const res = await fetch(`/api/negotiations?as=${as}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ garmentId: match.id, ownerId: match.userId }),
+        const searchRes = await fetch("/api/search/friend-closets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            as: asKey,
+            query_text: query.trim() || undefined,
+            reference_image_base64: refBase64,
+            category: category || undefined,
+            limit: 15,
+          }),
+        });
+        if (!searchRes.ok) {
+          throw new Error(`search ${searchRes.status}: ${await searchRes.text()}`);
+        }
+        const data = (await searchRes.json()) as { matches: Match[] };
+        setMatches(data.matches);
+
+        if (saveToWishlist && query.trim()) {
+          await fetch("/api/wishlist", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              as: asKey,
+              query_text: query.trim(),
+              reference_image_base64: refBase64,
+              max_rental_price_usd: maxPrice ? Number(maxPrice) : undefined,
+            }),
+          });
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     });
-    if (res.ok) {
-      router.push(`/negotiations?as=${as}`);
-    }
-  }
+  }, [asKey, query, category, maxPrice, refFile, saveToWishlist]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <div className="px-6 pt-20 pb-4 animate-fade-up">
-        <p className="text-[11px] tracking-[0.2em] uppercase mb-4" style={{ color: "var(--accent)" }}>
-          Discovery
-        </p>
-        <h1
-          className="text-[34px] leading-[1.1] font-light tracking-[-0.02em]"
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
-          Find It In a<br />Friend&apos;s Closet
-        </h1>
-      </div>
+    <div className="mt-6 space-y-6">
+      <div className="space-y-3 text-sm">
+        <label className="block">
+          <span className="text-xs text-black/60 dark:text-white/60">
+            describe what you want
+          </span>
+          <input
+            type="text"
+            placeholder="red floral midi dress"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-3 py-2"
+          />
+        </label>
 
-      {/* Search Area */}
-      <div className="px-6 flex flex-col gap-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
-        <textarea
-          placeholder="black satin midi dress for an evening event..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full h-[80px] rounded-xl px-4 py-3.5 text-[14px] resize-none outline-none transition-all duration-200 focus:ring-2"
-          style={{
-            background: "var(--surface)",
-            color: "var(--fg)",
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-sm)",
-          }}
-        />
-
-        <div className="flex gap-3">
-          <button
-            className="flex-1 h-11 rounded-xl text-[13px] flex items-center justify-center gap-2 transition-colors hover:opacity-80"
-            style={{ background: "var(--surface)", color: "var(--muted)", border: "1px solid var(--border)" }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-            Add photo
-          </button>
-          <div
-            className="flex-1 h-11 rounded-xl flex items-center px-3.5"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <input
-              type="text"
-              placeholder="Max $__/day"
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value.replace(/\D/g, ""))}
-              className="w-full bg-transparent text-[13px] outline-none"
-              style={{ color: "var(--fg)" }}
-            />
-          </div>
-        </div>
-
-        <button
-          onClick={handleSearch}
-          disabled={searching || !query.trim()}
-          className="h-[52px] rounded-xl text-[15px] font-medium flex items-center justify-center transition-all duration-200 hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
-          style={{ background: "var(--fg)", color: "var(--bg)" }}
-        >
-          {searching ? (
-            <span className="flex items-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Searching...
-            </span>
-          ) : (
-            "Search Friends\u2019 Closets"
-          )}
-        </button>
-
-        <div className="flex flex-wrap gap-2 pt-1">
-          {SAMPLE_QUERIES.map((sample) => (
-            <button
-              key={sample}
-              onClick={() => setQuery(sample)}
-              className="rounded-full px-3.5 py-2 text-[11px] text-left tracking-wide transition-colors hover:opacity-70"
-              style={{ background: "var(--surface)", color: "var(--muted)" }}
+        <div className="flex flex-wrap gap-3">
+          <label className="block flex-1 min-w-[140px]">
+            <span className="text-xs text-black/60 dark:text-white/60">category (optional)</span>
+            <select
+              value={category}
+              onChange={(e) =>
+                setCategory(e.target.value as (typeof CATEGORIES)[number])
+              }
+              className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1.5"
             >
-              {sample}
-            </button>
-          ))}
+              {CATEGORIES.map((c) => (
+                <option key={c || "any"} value={c}>
+                  {c || "any"}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block flex-1 min-w-[140px]">
+            <span className="text-xs text-black/60 dark:text-white/60">max price / day ($)</span>
+            <input
+              type="number"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              className="mt-1 block w-full rounded border border-black/15 dark:border-white/15 bg-transparent px-2 py-1.5"
+            />
+          </label>
+
+          <label className="block flex-1 min-w-[140px]">
+            <span className="text-xs text-black/60 dark:text-white/60">reference image (optional)</span>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setRefFile(e.target.files?.[0] ?? null)}
+              className="mt-1 block w-full text-xs"
+            />
+          </label>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-xs text-black/60 dark:text-white/60">
+          <input
+            type="checkbox"
+            checked={saveToWishlist}
+            onChange={(e) => setSaveToWishlist(e.target.checked)}
+          />
+          save this query to my wishlist
+        </label>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={run}
+            disabled={pending}
+            className="px-4 py-1.5 rounded bg-black text-white dark:bg-white dark:text-black disabled:opacity-40"
+          >
+            {pending ? "searching…" : "search friends"}
+          </button>
+          {error && <span className="text-xs text-red-600">error: {error}</span>}
         </div>
       </div>
 
-      {/* Results */}
-      {searched && (
-        <div className="px-6 pt-8 animate-fade-up">
-          <div className="flex items-center gap-4 mb-5">
-            <div className="flex-1 h-px" style={{ background: "var(--border-strong)" }} />
-            <span className="text-[10px] tracking-[0.2em] uppercase font-medium" style={{ color: "var(--muted)" }}>
-              {matches.length} Match{matches.length !== 1 ? "es" : ""}
-            </span>
-            <div className="flex-1 h-px" style={{ background: "var(--border-strong)" }} />
-          </div>
-
-          <div className="flex flex-col gap-3">
-            {matches.map((m, i) => (
-              <div
-                key={m.id}
-                className="flex items-center gap-4 p-3.5 rounded-xl transition-colors hover:opacity-95 animate-fade-up"
-                style={{ background: "var(--surface)", boxShadow: "var(--shadow-sm)", animationDelay: `${0.05 * i}s` }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={m.heroImageUrl}
-                  alt={m.category}
-                  className="w-16 h-20 rounded-lg object-cover flex-shrink-0"
-                  style={{ background: "var(--surface-hover)" }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[15px] font-medium truncate" style={{ fontFamily: "var(--font-serif)" }}>
-                    {m.subcategory || m.category}
-                  </p>
-                  <p className="text-[12px] mt-0.5 tracking-wide" style={{ color: "var(--muted)" }}>
-                    {m.ownerName}&apos;s closet
-                  </p>
-                  <div className="flex gap-3 mt-1.5">
-                    <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>
-                      {m.matchPercent}% match
-                    </span>
-                    {m.estimatedDailyRental && (
-                      <span className="text-[11px]" style={{ color: "var(--muted)" }}>~${m.estimatedDailyRental}/day</span>
-                    )}
+      {matches && (
+        <div>
+          <p className="text-xs uppercase tracking-wider text-black/50 dark:text-white/50 mb-3">
+            {matches.length} match{matches.length === 1 ? "" : "es"}
+          </p>
+          {matches.length === 0 ? (
+            <p className="text-sm text-black/60 dark:text-white/60">
+              Nothing found. Try broadening the query or adding a reference image.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {matches.map((m) => (
+                <div
+                  key={m.garment.id}
+                  className="rounded border border-black/10 dark:border-white/10 overflow-hidden"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={m.garment.heroImageUrl}
+                    alt={m.garment.subcategory ?? m.garment.category}
+                    className="w-full aspect-square object-cover"
+                  />
+                  <div className="px-2 py-1.5 text-xs space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="capitalize font-medium">
+                        {m.garment.subcategory ?? m.garment.category}
+                      </span>
+                      <span className="text-black/50 dark:text-white/50">
+                        {(1 - m.score).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-black/50 dark:text-white/50 capitalize">
+                      {[m.garment.colorPrimary, m.garment.brandGuess].filter(Boolean).join(" · ")}
+                    </div>
+                    <div className="text-black/50 dark:text-white/50">
+                      owned by {m.owner.name}
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-1 w-full px-2 py-1 rounded border border-black/15 dark:border-white/15 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+                      onClick={() =>
+                        alert(
+                          `Phase 6 will spawn a negotiation agent for this item (${m.garment.id}). Not wired yet.`,
+                        )
+                      }
+                    >
+                      request rental
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRent(m)}
-                  className="h-9 px-5 rounded-full text-[12px] font-medium tracking-wide flex-shrink-0 transition-all duration-200 hover:opacity-90 active:scale-95"
-                  style={{ background: "var(--fg)", color: "var(--bg)" }}
-                >
-                  Rent
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
